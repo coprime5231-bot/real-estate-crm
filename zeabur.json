@@ -1,0 +1,47 @@
+{
+  "serverless": false,
+  "buildCommand": "npm run build",
+  "startCommand": "npm start",
+  "envs": [
+    {
+      "key": "NOTION_API_KEY",
+      "value": "",
+      "description": "Your Notion Internal Integration Token"
+    },
+    {
+      "key": "NOTION_BUYER_DB_ID",
+      "value": "",
+      "description": "Notion Buyer Database ID"
+    },
+    {
+      "key": "NOTION_TODO_DB_ID",
+      "value": "",
+      "description": "Notion Todo Database ID"
+    },
+    {
+      "key": "NOTION_TRACKING_DB_ID",
+      "value": "",
+      "description": "Notion Tracking Database ID"
+    },
+    {
+      "key": "NOTION_WEEKLY_DB_ID",
+      "value": "",
+      "description": "Notion Weekly Database ID"
+    },
+    {
+      "key": "NOTION_STRATEGY_DB_ID",
+      "value": "",
+      "description": "Notion Strategy Database ID"
+    },
+    {
+      "key": "NOTION_AI_IDEAS_DB_ID",
+      "value": "",
+      "description": "Notion AI Ideas Database ID"
+    },
+    {
+      "key": "NOTION_MAIN_PAGE_ID",
+      "value": "32156ff9a8598091916ed853c177fa0f",
+      "description": "Notion Main Page ID"
+    }
+  ]
+}
