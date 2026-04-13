@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
           phone: extractText(properties['手機']?.phone_number || []) || extractText(properties['手機']?.rich_text || []),
           note: extractText(properties['NOTE']?.rich_text || []),
           progress: extractText(properties['最近進展']?.rich_text || []),
-          grade: extractSelectValue(properties['等級']?.select),
+          grade: (extractSelectValue(properties['等級']?.select) || undefined) as BuyerData['grade'],
           source: extractSelectValue(properties['來源']?.select),
           budget: extractText(properties['預算']?.rich_text || []),
           needs: extractText(properties['需求']?.rich_text || []),
