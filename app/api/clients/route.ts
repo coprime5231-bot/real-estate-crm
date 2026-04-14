@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion, { extractText, extractSelectValue, BuyerData } from '@/lib/notion'
 
+// 從 Notion multi_select 屬性取出 name 陣列
+function extractMultiSelect(prop: any): string[] {
+  if (!prop?.multi_select) return []
+  return prop.multi_select.map((o: any) => o.name).filter(Boolean)
+}
+
+// 從 Notion relation 屬性取出 id 陣列
+function extractRelation(prop: any): string[] {
+  if (!prop?.relation) return []
+  return prop.relation.map((r: any) => r.id).filter(Boolean)
+}
+
 export async function GET(request: NextRequest) {
   try {
     const buyerDbId = process.env.NOTION_BUYER_DB_ID
@@ -16,26 +28,38 @@ export async function GET(request: NextRequest) {
       database_id: buyerDbId,
     })
 
-    const clients: BuyerData[] = response.results
+    const clients = response.results
       .filter((page: any) => page.object === 'page')
       .map((page: any) => {
-        const properties = page.properties
+        const p = page.properties
 
         // 兼容「客戶等級」與舊名「等級」
-        const gradeProp = properties['客戶等級'] || properties['等級']
+        const gradeProp = p['客戶等級'] || p['等級']
+
+        // 手機同時兼容 phone_number 與 rich_text
+        const phoneRaw =
+          p['手機']?.phone_number ||
+          extractText(p['手機']?.rich_text || [])
+
+        // 區域為 multi_select，join 成字串顯示
+        const areaArr = extractMultiSelect(p['區域'])
 
         return {
           id: page.id,
-          name: properties['名稱']?.title?.[0]?.plain_text || '未命名',
-          phone: extractText(properties['手機']?.phone_number || []) || extractText(properties['手機']?.rich_text || []),
-          note: extractText(properties['NOTE']?.rich_text || []),
-          progress: extractText(properties['最近進展']?.rich_text || []),
+          name: p['名稱']?.title?.[0]?.plain_text || '未命名',
+          phone: phoneRaw || undefined,
+          note: extractText(p['NOTE']?.rich_text || []),
+          progress: extractText(p['最近進展']?.rich_text || []),
           grade: (extractSelectValue(gradeProp?.select) || undefined) as BuyerData['grade'],
-          source: extractSelectValue(properties['來源']?.select),
-          budget: extractText(properties['預算']?.rich_text || []),
-          needs: extractText(properties['需求']?.rich_text || []),
-          area: extractText(properties['區域']?.rich_text || []),
-          nextFollowUp: properties['下次跟進']?.date?.start,
+          budget: extractSelectValue(p['預算']?.select) || undefined,
+          needs: extractText(p['需求']?.rich_text || []),
+          area: areaArr.length ? areaArr.join('、') : undefined,
+          // 「下次跟進」= Notion「日期」欄位
+          nextFollowUp: p['日期']?.date?.start,
+          // 需求標籤（multi_select）→ 篩選按鈕用
+          needTags: extractMultiSelect(p['需求標籤']),
+          // 待辦事項 relation → 顯示關聯 id（後續抓標題用）
+          todoIds: extractRelation(p['待辦事項']),
         }
       })
 
