@@ -34,14 +34,30 @@ export async function GET(request: NextRequest) {
       })
 
       for (const block of childBlocks.results) {
-        if ('type' in block && (block.type === 'child_database' || block.type === 'database')) {
-          const dbTitle = ('child_database' in block && (block as any).child_database?.title) || ''
-          const dbName = typeof dbTitle === 'string' ? dbTitle : ''
-          if (dbName.includes('買方')) databases['NOTION_BUYER_DB_ID'] = block.id
-          if (dbName.includes('待辦') || dbName.includes('事項')) databases['NOTION_TODO_DB_ID'] = block.id
-          if (dbName.includes('追蹤') || dbName.includes('委託')) databases['NOTION_TRACKING_DB_ID'] = block.id
-          if (dbName.includes('目標')) databases['NOTION_GOAL_DB_ID'] = block.id
-          if (dbName.includes('ai') || dbName.includes('AI') || dbName.includes('想法')) databases['NOTION_AI_IDEAS_DB_ID'] = block.id
+        if ('type' in block) {
+          const blockType = block.type as string
+          if (blockType === 'child_database' || blockType === 'database') {
+            const dbTitle =
+              ('child_database' in block &&
+                (block as any).child_database?.title) ||
+              ''
+            const dbName = typeof dbTitle === 'string' ? dbTitle : ''
+
+            if (dbName.includes('買方'))
+              databases['NOTION_BUYER_DB_ID'] = block.id
+            if (dbName.includes('待辦') || dbName.includes('事項'))
+              databases['NOTION_TODO_DB_ID'] = block.id
+            if (dbName.includes('追蹤') || dbName.includes('委託'))
+              databases['NOTION_TRACKING_DB_ID'] = block.id
+            if (dbName.includes('目標'))
+              databases['NOTION_GOAL_DB_ID'] = block.id
+            if (
+              dbName.includes('ai') ||
+              dbName.includes('AI') ||
+              dbName.includes('想法')
+            )
+              databases['NOTION_AI_IDEAS_DB_ID'] = block.id
+          }
         }
       }
 
@@ -51,16 +67,38 @@ export async function GET(request: NextRequest) {
           filter: { property: 'object', value: 'database' },
           page_size: 20,
         })
+
         for (const db of searchResp.results) {
           if ('title' in db && db.title) {
-            const title = (db as any).title.map((t: any) => t.plain_text).join('')
-            if (title.includes('買方') && !databases['NOTION_BUYER_DB_ID']) databases['NOTION_BUYER_DB_ID'] = db.id
-            if ((title.includes('待辦') || title.includes('事項')) && !databases['NOTION_TODO_DB_ID']) databases['NOTION_TODO_DB_ID'] = db.id
-            if ((title.includes('追蹤') || title.includes('委託')) && !databases['NOTION_TRACKING_DB_ID']) databases['NOTION_TRACKING_DB_ID'] = db.id
-            if (title.includes('Weekly') && !databases['NOTION_WEEKLY_DB_ID']) databases['NOTION_WEEKLY_DB_ID'] = db.id
-            if (title.includes('策略') && !databases['NOTION_STRATEGY_DB_ID']) databases['NOTION_STRATEGY_DB_ID'] = db.id
-            if ((title.includes('ai') || title.includes('AI') || title.includes('想法')) && !databases['NOTION_AI_IDEAS_DB_ID']) databases['NOTION_AI_IDEAS_DB_ID'] = db.id
-            if (title.includes('目標') && !databases['NOTION_GOAL_DB_ID']) databases['NOTION_GOAL_DB_ID'] = db.id
+            const title = (db as any).title
+              .map((t: any) => t.plain_text)
+              .join('')
+
+            if (title.includes('買方') && !databases['NOTION_BUYER_DB_ID'])
+              databases['NOTION_BUYER_DB_ID'] = db.id
+            if (
+              (title.includes('待辦') || title.includes('事項')) &&
+              !databases['NOTION_TODO_DB_ID']
+            )
+              databases['NOTION_TODO_DB_ID'] = db.id
+            if (
+              (title.includes('追蹤') || title.includes('委託')) &&
+              !databases['NOTION_TRACKING_DB_ID']
+            )
+              databases['NOTION_TRACKING_DB_ID'] = db.id
+            if (title.includes('Weekly') && !databases['NOTION_WEEKLY_DB_ID'])
+              databases['NOTION_WEEKLY_DB_ID'] = db.id
+            if (title.includes('策略') && !databases['NOTION_STRATEGY_DB_ID'])
+              databases['NOTION_STRATEGY_DB_ID'] = db.id
+            if (
+              (title.includes('ai') ||
+                title.includes('AI') ||
+                title.includes('想法')) &&
+              !databases['NOTION_AI_IDEAS_DB_ID']
+            )
+              databases['NOTION_AI_IDEAS_DB_ID'] = db.id
+            if (title.includes('目標') && !databases['NOTION_GOAL_DB_ID'])
+              databases['NOTION_GOAL_DB_ID'] = db.id
           }
         }
       } catch (e) {
