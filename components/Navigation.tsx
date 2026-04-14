@@ -7,6 +7,8 @@ import {
   Users,
   Video,
   Zap,
+  FileText,
+  Calendar,
   Settings,
 } from 'lucide-react'
 
@@ -16,6 +18,8 @@ export default function Navigation() {
   const tabs = [
     { href: '/', label: '開發', icon: Home },
     { href: '/marketing', label: '行銷', icon: Users },
+    { href: '/entrust', label: '委託', icon: FileText },
+    { href: '/12weeks', label: '12周', icon: Calendar },
     { href: '/videos', label: '短影音', icon: Video },
     { href: '/ai', label: 'AI', icon: Zap },
   ]
@@ -26,7 +30,7 @@ export default function Navigation() {
       <nav className="hidden md:flex border-b border-slate-700 bg-slate-900 sticky top-0 z-40">
         <div className="flex items-center gap-8 px-6 py-4 w-full max-w-7xl mx-auto">
           <div className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-            房仲CRM
+            千萬房仲之路
           </div>
           <div className="flex gap-8 ml-8">
             {tabs.map(({ href, label, icon: Icon }) => {
