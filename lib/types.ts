@@ -12,6 +12,8 @@ export interface Client {
   needs?: string
   area?: string
   nextFollowUp?: string
+  needTags?: string[]
+  todoIds?: string[]
 }
 
 export interface Property {
