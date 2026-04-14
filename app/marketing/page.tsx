@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Search, AlertTriangle, Calendar, ChevronRight } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Search, AlertTriangle, Calendar, ChevronRight, Tag } from 'lucide-react'
 import { Client, Grade } from '@/lib/types'
 import ClientDetailModal from '@/components/ClientDetailModal'
 import { daysUntil, isOverdue, formatDate } from '@/lib/notion'
@@ -13,6 +13,7 @@ export default function MarketingPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedGrade, setSelectedGrade] = useState<Grade | 'all'>('A級')
+  const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +30,7 @@ export default function MarketingPage() {
       if (res.ok) {
         const data = await res.json()
         setClients(data)
-        filterClients(data, searchTerm, selectedGrade)
+        filterClients(data, searchTerm, selectedGrade, selectedTag)
       } else {
         const errData = await res.json().catch(() => ({}))
         setError(errData.error || '無法載入客戶資料')
@@ -41,7 +42,7 @@ export default function MarketingPage() {
     }
   }
 
-  // 只比對首字母，支援 Notion 選項為 'A'、'A級'、'A 級' 等任何寫法
+  // 依首字母比對，兼容 Notion 選項為 'A'、'A級'、'A 級' 等寫法
   const gradeMatches = (clientGrade: string | undefined, target: Grade | 'all') => {
     if (target === 'all') return true
     if (!clientGrade) return false
@@ -51,7 +52,8 @@ export default function MarketingPage() {
   const filterClients = (
     clientsList: Client[],
     search: string,
-    grade: Grade | 'all'
+    grade: Grade | 'all',
+    tag: string | null
   ) => {
     let filtered = clientsList
 
@@ -67,7 +69,10 @@ export default function MarketingPage() {
 
     filtered = filtered.filter((c) => gradeMatches(c.grade, grade))
 
-    // Sort by overdue follow-ups first
+    if (tag) {
+      filtered = filtered.filter((c) => c.needTags?.includes(tag))
+    }
+
     filtered.sort((a, b) => {
       const aOverdue = isOverdue(a.nextFollowUp)
       const bOverdue = isOverdue(b.nextFollowUp)
@@ -81,12 +86,18 @@ export default function MarketingPage() {
 
   const handleSearch = (term: string) => {
     setSearchTerm(term)
-    filterClients(clients, term, selectedGrade)
+    filterClients(clients, term, selectedGrade, selectedTag)
   }
 
   const handleGradeFilter = (grade: Grade | 'all') => {
     setSelectedGrade(grade)
-    filterClients(clients, searchTerm, grade)
+    filterClients(clients, searchTerm, grade, selectedTag)
+  }
+
+  const handleTagFilter = (tag: string | null) => {
+    const next = tag === selectedTag ? null : tag
+    setSelectedTag(next)
+    filterClients(clients, searchTerm, selectedGrade, next)
   }
 
   const handleOpenClient = (client: Client) => {
@@ -112,7 +123,8 @@ export default function MarketingPage() {
             c.id === updatedClient.id ? updatedClient : c
           ),
           searchTerm,
-          selectedGrade
+          selectedGrade,
+          selectedTag
         )
         setIsModalOpen(false)
       }
@@ -120,6 +132,13 @@ export default function MarketingPage() {
       setIsSaving(false)
     }
   }
+
+  // 蒐集所有出現過的需求標籤（去重、排序）
+  const allTags = useMemo(() => {
+    const set = new Set<string>()
+    clients.forEach((c) => c.needTags?.forEach((t) => set.add(t)))
+    return Array.from(set).sort()
+  }, [clients])
 
   if (error) {
     return (
@@ -158,7 +177,7 @@ export default function MarketingPage() {
         </div>
       )}
 
-      {/* Search and Filter */}
+      {/* Search and Grade Filter */}
       <div className="flex flex-col md:flex-row gap-4">
         <div className="flex-1 relative">
           <Search
@@ -189,6 +208,35 @@ export default function MarketingPage() {
           ))}
         </div>
       </div>
+
+      {/* Tag Filter */}
+      {allTags.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Tag className="text-slate-500" size={16} />
+          <span className="text-xs text-slate-500 mr-1">需求標籤：</span>
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => handleTagFilter(tag)}
+              className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                selectedTag === tag
+                  ? 'bg-pink-600 text-white'
+                  : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-pink-500 hover:text-pink-300'
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
+          {selectedTag && (
+            <button
+              onClick={() => handleTagFilter(null)}
+              className="text-xs text-slate-500 hover:text-slate-300 underline ml-1"
+            >
+              清除
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Clients Grid */}
       {isLoading ? (
