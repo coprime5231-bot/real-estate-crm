@@ -12,7 +12,7 @@ export default function MarketingPage() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedGrade, setSelectedGrade] = useState<Grade | 'all'>('all')
+  const [selectedGrade, setSelectedGrade] = useState<Grade | 'all'>('A級')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -41,6 +41,13 @@ export default function MarketingPage() {
     }
   }
 
+  // 只比對首字母，支援 Notion 選項為 'A'、'A級'、'A 級' 等任何寫法
+  const gradeMatches = (clientGrade: string | undefined, target: Grade | 'all') => {
+    if (target === 'all') return true
+    if (!clientGrade) return false
+    return clientGrade.trim().charAt(0).toUpperCase() === target.charAt(0)
+  }
+
   const filterClients = (
     clientsList: Client[],
     search: string,
@@ -58,9 +65,7 @@ export default function MarketingPage() {
       )
     }
 
-    if (grade !== 'all') {
-      filtered = filtered.filter((c) => c.grade === grade)
-    }
+    filtered = filtered.filter((c) => gradeMatches(c.grade, grade))
 
     // Sort by overdue follow-ups first
     filtered.sort((a, b) => {
@@ -169,7 +174,7 @@ export default function MarketingPage() {
           />
         </div>
         <div className="flex gap-2">
-          {(['all', 'A級', 'B級', 'C級'] as const).map((grade) => (
+          {(['A級', 'B級', 'C級', 'all'] as const).map((grade) => (
             <button
               key={grade}
               onClick={() => handleGradeFilter(grade)}
