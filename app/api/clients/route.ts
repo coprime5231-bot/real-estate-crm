@@ -21,13 +21,16 @@ export async function GET(request: NextRequest) {
       .map((page: any) => {
         const properties = page.properties
 
+        // 兼容「客戶等級」與舊名「等級」
+        const gradeProp = properties['客戶等級'] || properties['等級']
+
         return {
           id: page.id,
           name: properties['名稱']?.title?.[0]?.plain_text || '未命名',
           phone: extractText(properties['手機']?.phone_number || []) || extractText(properties['手機']?.rich_text || []),
           note: extractText(properties['NOTE']?.rich_text || []),
           progress: extractText(properties['最近進展']?.rich_text || []),
-          grade: (extractSelectValue(properties['等級']?.select) || undefined) as BuyerData['grade'],
+          grade: (extractSelectValue(gradeProp?.select) || undefined) as BuyerData['grade'],
           source: extractSelectValue(properties['來源']?.select),
           budget: extractText(properties['預算']?.rich_text || []),
           needs: extractText(properties['需求']?.rich_text || []),
