@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { Search, AlertTriangle, Calendar, ChevronRight } from 'lucide-react'
 import { Client, Grade } from '@/lib/types'
 import ClientDetailModal from '@/components/ClientDetailModal'
-import SetupRequired from '@/components/SetupRequired'
 import { daysUntil, isOverdue, formatDate } from '@/lib/notion'
 
 export default function MarketingPage() {
@@ -15,39 +14,28 @@ export default function MarketingPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedGrade, setSelectedGrade] = useState<Grade | 'all'>('all')
   const [isLoading, setIsLoading] = useState(true)
-  const [setupStatus, setSetupStatus] = useState<any>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchSetupStatus()
+    fetchClients()
   }, [])
-
-  const fetchSetupStatus = async () => {
-    try {
-      const res = await fetch('/api/setup')
-      const data = await res.json()
-      setSetupStatus(data)
-
-      if (!data.configured) {
-        setIsLoading(false)
-        return
-      }
-
-      fetchClients()
-    } catch (err) {
-      setIsLoading(false)
-    }
-  }
 
   const fetchClients = async () => {
     try {
       setIsLoading(true)
+      setError(null)
       const res = await fetch('/api/clients')
       if (res.ok) {
         const data = await res.json()
         setClients(data)
         filterClients(data, searchTerm, selectedGrade)
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        setError(errData.error || '無法載入客戶資料')
       }
+    } catch (err) {
+      setError('網路錯誤，請稍後再試')
     } finally {
       setIsLoading(false)
     }
@@ -128,12 +116,22 @@ export default function MarketingPage() {
     }
   }
 
-  if (!setupStatus) {
-    return <div className="p-8 text-center">載入中...</div>
-  }
-
-  if (!setupStatus.configured) {
-    return <SetupRequired missingIds={setupStatus.missingIds} />
+  if (error) {
+    return (
+      <div className="p-8 text-center">
+        <div className="bg-red-900/20 border border-red-700 rounded-lg p-6 max-w-md mx-auto">
+          <AlertTriangle className="text-red-400 mx-auto mb-3" size={32} />
+          <p className="text-red-300 font-semibold mb-2">載入失敗</p>
+          <p className="text-sm text-red-200 mb-4">{error}</p>
+          <button
+            onClick={fetchClients}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
+          >
+            重試
+          </button>
+        </div>
+      </div>
+    )
   }
 
   const overdueClients = filteredClients.filter((c) =>
@@ -170,7 +168,6 @@ export default function MarketingPage() {
             className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           />
         </div>
-
         <div className="flex gap-2">
           {(['all', 'A級', 'B級', 'C級'] as const).map((grade) => (
             <button
@@ -214,15 +211,21 @@ export default function MarketingPage() {
                     </h3>
                     <p className="text-sm text-slate-400">{client.grade}</p>
                   </div>
-                  <ChevronRight className="text-slate-600 group-hover:text-indigo-400 transition-colors" size={20} />
+                  <ChevronRight
+                    className="text-slate-600 group-hover:text-indigo-400 transition-colors"
+                    size={20}
+                  />
                 </div>
 
                 {client.phone && (
-                  <p className="text-sm text-slate-300 mb-2">📱 {client.phone}</p>
+                  <p className="text-sm text-slate-300 mb-2">
+                    📱 {client.phone}
+                  </p>
                 )}
-
                 {client.area && (
-                  <p className="text-sm text-slate-300 mb-3">📍 {client.area}</p>
+                  <p className="text-sm text-slate-300 mb-3">
+                    📍 {client.area}
+                  </p>
                 )}
 
                 {client.nextFollowUp && (
