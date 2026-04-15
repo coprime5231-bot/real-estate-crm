@@ -23,6 +23,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // MBA 需要讀 /api/notion/weekly-tasks（歷史原因沒放在 /api/m 下）
+  // → 接受 CRM 或 MBA 任一 cookie，讓 MBA 不依賴 CRM 登入狀態
+  if (pathname === '/api/notion/weekly-tasks') {
+    const crmOk = request.cookies.get('crm-auth')?.value === process.env.CRM_AUTH_SECRET
+    const mbaOk = request.cookies.get('mba-auth')?.value === process.env.MBA_AUTH_SECRET
+    if (crmOk || mbaOk) return NextResponse.next()
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
   const authToken = request.cookies.get('crm-auth')?.value
   if (!authToken || authToken !== process.env.CRM_AUTH_SECRET) {
     const loginUrl = new URL('/login', request.url)
