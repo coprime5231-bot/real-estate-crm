@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "es2020",
-    "lib": ["es2020", "dom", "dom.iterable"],
+    "lib": [
+      "es2020",
+      "dom",
+      "dom.iterable"
+    ],
     "jsx": "preserve",
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -16,9 +20,25 @@
     "declarationMap": true,
     "sourceMap": true,
     "paths": {
-      "@/*": ["./*"]
-    }
+      "@/*": [
+        "./*"
+      ]
+    },
+    "incremental": true,
+    "isolatedModules": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
