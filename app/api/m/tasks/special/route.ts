@@ -25,10 +25,10 @@ export async function POST(req: NextRequest) {
 
     const result = await pool.query(
       `insert into task_completions
-        (source, action, base_score, total_score, card_color, quarter)
-       values ($1, $2, $3, $4, $5, $6)
+        (source, action, base_score, total_score, card_color, quarter, stars_awarded)
+       values ($1, $2, $3, $4, $5, $6, $7)
        returning id, total_score, card_color, created_at`,
-      ['custom_special', action, spec.baseScore, spec.baseScore, spec.cardColor, quarter]
+      ['custom_special', action, spec.baseScore, spec.baseScore, spec.cardColor, quarter, spec.stars]
     )
 
     const row = result.rows[0]

@@ -44,11 +44,13 @@ export async function POST(req: NextRequest) {
     const bonus = calcDistanceBonus(distanceKm)
     const totalScore = spec.baseScore + bonus
 
+    const starsAwarded = 3
+
     const result = await pool.query(
       `INSERT INTO task_completions
         (source, action, calendar_event_id, base_score, distance_bonus,
-         total_score, card_color, distance_km, quarter)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         total_score, card_color, distance_km, quarter, stars_awarded)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id, total_score, card_color, created_at`,
       [
         'visit',
@@ -60,6 +62,7 @@ export async function POST(req: NextRequest) {
         spec.cardColor,
         distanceKm ?? null,
         quarter,
+        starsAwarded,
       ],
     )
 

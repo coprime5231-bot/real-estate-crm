@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import type { TodayTask } from '@/lib/mba/calendar'
 import SpecialButtons from './SpecialButtons'
 import TodayTaskList from './TodayTaskList'
+import ChestBar from './ChestBar'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,6 +60,8 @@ export default async function MBAHome() {
         </div>
       </header>
 
+      <ChestBar />
+
       <SpecialButtons />
 
       <TodayTaskList tasks={todayTasks} />
@@ -100,7 +103,7 @@ export default async function MBAHome() {
       </section>
 
       <footer style={{ marginTop: 40, fontSize: 11, color: '#555', textAlign: 'center' }}>
-        MBA Step 5b · 🐈
+        MBA Step 5c · 🐈
       </footer>
     </main>
   )

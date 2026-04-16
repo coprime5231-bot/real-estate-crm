@@ -45,13 +45,14 @@ export async function POST(req: NextRequest) {
 
     const spec = VIEWING_SCORE[ACTION_MAP[act]]
     const totalScore = spec.baseScore
+    const starsAwarded = 3
 
     const result = await pool.query(
       `INSERT INTO task_completions
-        (source, action, calendar_event_id, base_score, total_score, card_color, quarter)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+        (source, action, calendar_event_id, base_score, total_score, card_color, quarter, stars_awarded)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, total_score, card_color, created_at`,
-      ['viewing', act, eventId, spec.baseScore, totalScore, spec.cardColor, quarter],
+      ['viewing', act, eventId, spec.baseScore, totalScore, spec.cardColor, quarter, starsAwarded],
     )
 
     let buyerOk: boolean | null = null

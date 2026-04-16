@@ -8,12 +8,12 @@ export type SpecialAction = 'revisit' | 'entrust' | 'deposit' | 'close'
 /** 特殊自訂任務（覆看 / 委託 / 收斡 / 成交）的基礎分與卡色 */
 export const SPECIAL_TASK_MAP: Record<
   SpecialAction,
-  { label: string; baseScore: number; cardColor: CardColor }
+  { label: string; baseScore: number; cardColor: CardColor; stars: number }
 > = {
-  revisit: { label: '覆看', baseScore: 100, cardColor: 'green' },
-  entrust: { label: '委託', baseScore: 500, cardColor: 'purple' },
-  deposit: { label: '收斡', baseScore: 500, cardColor: 'purple' },
-  close: { label: '成交', baseScore: 5000, cardColor: 'orange' },
+  revisit: { label: '覆看', baseScore: 100, cardColor: 'green', stars: 0 },
+  entrust: { label: '委託', baseScore: 500, cardColor: 'purple', stars: 30 },
+  deposit: { label: '收斡', baseScore: 500, cardColor: 'purple', stars: 30 },
+  close: { label: '成交', baseScore: 5000, cardColor: 'orange', stars: 100 },
 }
 
 /** 拜訪按鈕分數（找到人=藍卡，其餘綠卡） */
