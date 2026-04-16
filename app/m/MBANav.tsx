@@ -28,6 +28,12 @@ export default function MBANav() {
 
   return (
     <>
+      <style>{`
+        .mba-nav-btn:active {
+          transform: scale(0.95) !important;
+          background: #2A2E3C !important;
+        }
+      `}</style>
       {toast && (
         <div
           style={{
@@ -56,32 +62,33 @@ export default function MBANav() {
           right: 0,
           background: '#151825',
           borderTop: '1px solid #2A2E3C',
-          display: 'flex',
-          justifyContent: 'space-around',
-          alignItems: 'center',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
           zIndex: 9000,
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
-        {tabs.map((tab) => {
+        {tabs.map((tab, i) => {
           const isActive = currentTab === tab.id
           return (
             <button
               key={tab.id}
+              className="mba-nav-btn"
               onClick={() => handleTab(tab)}
               style={{
-                flex: 1,
+                position: 'relative',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: 4,
                 padding: '16px 0 14px',
                 border: 'none',
-                background: 'transparent',
-                color: isActive ? '#FFD86B' : '#8B8FA3',
+                borderLeft: i > 0 ? '1px solid #2A2E3C' : 'none',
+                background: isActive ? '#1A1E2E' : 'transparent',
+                color: isActive ? '#FFD86B' : '#6B7280',
                 fontSize: 44,
                 cursor: 'pointer',
-                transition: 'color 0.2s',
+                transition: 'transform 150ms, background 150ms, color 150ms',
               }}
             >
               <span>{tab.icon}</span>
@@ -93,6 +100,18 @@ export default function MBANav() {
               >
                 {tab.label}
               </span>
+              {isActive && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 3,
+                    background: '#FFD86B',
+                  }}
+                />
+              )}
             </button>
           )
         })}
