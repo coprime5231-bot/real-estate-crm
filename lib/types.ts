@@ -57,3 +57,27 @@ export interface SetupStatus {
   missingIds: string[]
   lastChecked: string
 }
+
+export interface ImportantItem {
+  id: string
+  title: string
+  clientName: string
+  clientId: string
+  source: 'buyer' | 'tracking'
+}
+
+export interface TodoItem {
+  id: string
+  title: string
+  clientName: string
+  clientId: string
+  source: 'buyer' | 'tracking'
+  completed: boolean
+  createdTime: string
+}
+
+export interface Block {
+  id: string
+  text: string
+  createdTime: string
+}
