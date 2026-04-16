@@ -81,3 +81,28 @@ export async function updateEventColor(eventId: string, colorId: string): Promis
     requestBody: { colorId },
   })
 }
+
+/**
+ * 建立全天事件。用於 CRM 待辦事項設定日期時同步到 Google Calendar。
+ * @param summary  事件標題（例：「[林太太] 寄合約副本給代書」）
+ * @param date     日期字串，格式 YYYY-MM-DD
+ * @param description 可選的事件說明
+ * @returns 新建的事件 ID
+ */
+export async function createEvent(
+  summary: string,
+  date: string,
+  description?: string
+): Promise<string> {
+  const cal = getCalendarClient()
+  const res = await cal.events.insert({
+    calendarId: CALENDAR_ID,
+    requestBody: {
+      summary,
+      description,
+      start: { date, timeZone: TZ },
+      end: { date, timeZone: TZ },
+    },
+  })
+  return res.data.id || ''
+}
