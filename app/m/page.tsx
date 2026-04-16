@@ -1,6 +1,7 @@
 import { getWeekInfo } from '@/lib/mba/week-calc'
 import { headers } from 'next/headers'
 import type { TodayTask } from '@/lib/mba/calendar'
+import SpecialButtons from './SpecialButtons'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +68,9 @@ export default async function MBAHome() {
           本季倒數 {week.daysToQuarterEnd} 天
         </div>
       </header>
+
+      {/* ===== 賞金任務 ===== */}
+      <SpecialButtons />
 
       {/* ===== 今日任務 ===== */}
       <section style={{ marginBottom: 32 }}>
@@ -184,7 +188,7 @@ export default async function MBAHome() {
       </section>
 
       <footer style={{ marginTop: 40, fontSize: 11, color: '#555', textAlign: 'center' }}>
-        MBA Step 4 · 🐈
+        MBA Step 5a · 🐈
       </footer>
     </main>
   )
