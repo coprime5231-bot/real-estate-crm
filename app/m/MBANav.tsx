@@ -74,12 +74,12 @@ export default function MBANav() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: 2,
-                padding: '10px 0 8px',
+                gap: 4,
+                padding: '16px 0 14px',
                 border: 'none',
                 background: 'transparent',
                 color: isActive ? '#FFD86B' : '#8B8FA3',
-                fontSize: 20,
+                fontSize: 44,
                 cursor: 'pointer',
                 transition: 'color 0.2s',
               }}
@@ -87,7 +87,7 @@ export default function MBANav() {
               <span>{tab.icon}</span>
               <span
                 style={{
-                  fontSize: 11,
+                  fontSize: 18,
                   fontWeight: isActive ? 700 : 400,
                 }}
               >

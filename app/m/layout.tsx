@@ -30,7 +30,7 @@ export default function MBALayout({ children }: { children: React.ReactNode }) {
         color: '#F5F5FA',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         WebkitFontSmoothing: 'antialiased',
-        paddingBottom: 80,
+        paddingBottom: 120,
       }}
     >
       <AnimationProvider>{children}</AnimationProvider>
