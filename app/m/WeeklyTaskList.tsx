@@ -3,53 +3,45 @@
 import { useState, useCallback, useRef } from 'react'
 import { useAnimation } from './AnimationProvider'
 
-type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
-
-const DAY_LABELS: Array<{ key: DayKey; label: string }> = [
-  { key: 'mon', label: '一' },
-  { key: 'tue', label: '二' },
-  { key: 'wed', label: '三' },
-  { key: 'thu', label: '四' },
-  { key: 'fri', label: '五' },
-  { key: 'sat', label: '六' },
-  { key: 'sun', label: '日' },
-]
-
 interface WeeklyTask {
   id: string
   task: string
   goal: string
   frequency: number
-  checks: Record<string, boolean>
+  count: number        // PG count this week
+  bonusClaimed: boolean // already got the reach-target bonus
 }
 
-// 目標分類 → 顏色
-const GOAL_COLORS: Record<string, string> = {
+const CATEGORIES = ['開發', '行銷', '短影音', '自我成長'] as const
+type Category = (typeof CATEGORIES)[number]
+
+const CATEGORY_COLORS: Record<Category, string> = {
   '開發': '#4A9EFF',
   '行銷': '#A060FF',
   '短影音': '#FF8C42',
   '自我成長': '#3FB97A',
 }
 
-function goalColor(goal: string): string {
-  return GOAL_COLORS[goal] ?? '#8B8FA3'
-}
-
-function checkedCount(checks: Record<string, boolean>): number {
-  return Object.values(checks).filter(Boolean).length
+const CATEGORY_ICONS: Record<Category, string> = {
+  '開發': '💻',
+  '行銷': '📣',
+  '短影音': '🎬',
+  '自我成長': '📚',
 }
 
 export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
-  // 本地 checks state（optimistic update 用）
-  const [localChecks, setLocalChecks] = useState<Record<string, Record<string, boolean>>>(() => {
-    const init: Record<string, Record<string, boolean>> = {}
-    for (const t of tasks) {
-      init[t.id] = { ...t.checks }
-    }
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
+  const [localCounts, setLocalCounts] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {}
+    for (const t of tasks) init[t.id] = t.count
     return init
   })
-
-  const [loading, setLoading] = useState<string | null>(null) // "pageId-day"
+  const [localBonus, setLocalBonus] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {}
+    for (const t of tasks) init[t.id] = t.bonusClaimed
+    return init
+  })
+  const [loading, setLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<{ text: string; isError: boolean } | null>(null)
   const btnRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const { starBurst, scorePopup, celebrate } = useAnimation()
@@ -59,19 +51,26 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
     setTimeout(() => setToast(null), 2000)
   }, [])
 
-  async function toggleCheck(task: WeeklyTask, day: DayKey) {
-    const loadingKey = `${task.id}-${day}`
+  // Group tasks by goal (category)
+  const grouped = new Map<Category, WeeklyTask[]>()
+  for (const cat of CATEGORIES) grouped.set(cat, [])
+  for (const t of tasks) {
+    const cat = CATEGORIES.includes(t.goal as Category) ? (t.goal as Category) : null
+    if (cat) grouped.get(cat)!.push(t)
+  }
+
+  // Category summary: done/total
+  function categorySummary(cat: Category) {
+    const catTasks = grouped.get(cat) ?? []
+    const total = catTasks.reduce((s, t) => s + t.frequency, 0)
+    const done = catTasks.reduce((s, t) => s + Math.min(localCounts[t.id] ?? t.count, t.frequency), 0)
+    return { done, total, taskCount: catTasks.length }
+  }
+
+  async function handleComplete(task: WeeklyTask) {
     if (loading) return
-
-    const currentChecks = localChecks[task.id] ?? task.checks
-    const newChecked = !currentChecks[day]
-
-    // Optimistic update
-    setLoading(loadingKey)
-    setLocalChecks((prev) => ({
-      ...prev,
-      [task.id]: { ...prev[task.id], [day]: newChecked },
-    }))
+    const refKey = task.id
+    setLoading(refKey)
 
     try {
       const res = await fetch('/api/m/tasks/weekly', {
@@ -79,8 +78,6 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           notionPageId: task.id,
-          day,
-          checked: newChecked,
           taskName: task.task,
           frequency: task.frequency,
         }),
@@ -88,179 +85,208 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error ?? 'failed')
 
-      if (newChecked && data.score > 0) {
-        // 動畫
-        const btn = btnRefs.current[loadingKey]
-        if (btn) {
-          const rect = btn.getBoundingClientRect()
-          const cx = rect.left + rect.width / 2
-          const cy = rect.top + rect.height / 2
-          starBurst(cx, cy)
-          scorePopup(`+${data.score}`, cx, cy - 10)
-        }
+      const newCount = (localCounts[task.id] ?? task.count) + 1
+      setLocalCounts((prev) => ({ ...prev, [task.id]: newCount }))
 
-        if (data.bonus) {
-          // 達標慶祝
-          celebrate('small')
-          const starsText = data.stars > 0 ? ` ⭐+${data.stars}` : ''
-          showToast(`${task.task} 🎯達標！${starsText}`)
-        }
+      // Animation
+      const btn = btnRefs.current[refKey]
+      if (btn) {
+        const rect = btn.getBoundingClientRect()
+        const cx = rect.left + rect.width / 2
+        const cy = rect.top + rect.height / 2
+        starBurst(cx, cy)
+        scorePopup(`+${data.score}`, cx, cy - 10)
+      }
+
+      if (data.bonus && !localBonus[task.id]) {
+        setLocalBonus((prev) => ({ ...prev, [task.id]: true }))
+        celebrate('small')
+        const starsText = data.stars > 0 ? ` ⭐+${data.stars}` : ''
+        showToast(`${task.task} 🎯達標！${starsText}`)
       }
     } catch (err) {
-      // Revert optimistic update
-      setLocalChecks((prev) => ({
-        ...prev,
-        [task.id]: { ...prev[task.id], [day]: !newChecked },
-      }))
       showToast(`失敗：${(err as Error).message}`, true)
     } finally {
       setLoading(null)
     }
   }
 
-  // 依目標分組
-  const grouped = new Map<string, WeeklyTask[]>()
-  for (const t of tasks) {
-    const g = t.goal || '其他'
-    if (!grouped.has(g)) grouped.set(g, [])
-    grouped.get(g)!.push(t)
+  // ===== Layer 1: Category buttons =====
+  if (!selectedCategory) {
+    return (
+      <section style={{ marginBottom: 32 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 16 }}>
+          本週任務
+        </h2>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {CATEGORIES.map((cat) => {
+            const { done, total, taskCount } = categorySummary(cat)
+            const allDone = total > 0 && done >= total
+            return (
+              <button
+                key={cat}
+                onClick={() => taskCount > 0 && setSelectedCategory(cat)}
+                style={{
+                  padding: '24px 16px',
+                  border: 'none',
+                  borderRadius: 16,
+                  background: allDone ? '#1A2A1A' : '#2A2E3C',
+                  borderLeft: `4px solid ${CATEGORY_COLORS[cat]}`,
+                  cursor: taskCount > 0 ? 'pointer' : 'default',
+                  opacity: taskCount === 0 ? 0.4 : 1,
+                  textAlign: 'left',
+                  transition: 'transform 0.15s',
+                }}
+              >
+                <div style={{ fontSize: 28, marginBottom: 8 }}>{CATEGORY_ICONS[cat]}</div>
+                <div style={{ fontSize: 18, fontWeight: 600, color: '#F5F5FA', marginBottom: 4 }}>
+                  {cat}
+                </div>
+                <div style={{
+                  fontSize: 15,
+                  color: allDone ? '#3FB97A' : '#8B8FA3',
+                  fontWeight: allDone ? 700 : 400,
+                }}>
+                  {allDone ? '✅ ' : ''}{done}/{total} 完成
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {toast && <Toast toast={toast} />}
+      </section>
+    )
   }
+
+  // ===== Layer 2: Task cards for selected category =====
+  const catTasks = grouped.get(selectedCategory) ?? []
 
   return (
     <section style={{ marginBottom: 32 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
-        本週任務（{tasks.length}）
+      <button
+        onClick={() => setSelectedCategory(null)}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#8B8FA3',
+          fontSize: 16,
+          cursor: 'pointer',
+          padding: '4px 0',
+          marginBottom: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+      >
+        ← 返回分區
+      </button>
+
+      <h2 style={{
+        fontSize: 22,
+        fontWeight: 600,
+        marginBottom: 16,
+        color: CATEGORY_COLORS[selectedCategory],
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+      }}>
+        {CATEGORY_ICONS[selectedCategory]} {selectedCategory}
       </h2>
 
-      {tasks.length === 0 ? (
-        <div style={{ color: '#8B8FA3', fontSize: 14 }}>
-          （本週沒有任務，請到 Notion 新增）
+      {catTasks.length === 0 ? (
+        <div style={{ color: '#8B8FA3', fontSize: 16 }}>
+          （這個分區沒有任務）
         </div>
       ) : (
-        Array.from(grouped.entries()).map(([goal, gTasks]) => (
-          <div key={goal} style={{ marginBottom: 16 }}>
-            {/* 目標標題 */}
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: goalColor(goal),
-                marginBottom: 6,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <span
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {catTasks.map((t) => {
+            const count = localCounts[t.id] ?? t.count
+            const reached = count >= t.frequency
+            const isLoading = loading === t.id
+
+            return (
+              <li
+                key={t.id}
                 style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: goalColor(goal),
-                  display: 'inline-block',
+                  padding: '24px 28px',
+                  marginBottom: 12,
+                  background: reached ? '#1A2A1A' : '#2A2E3C',
+                  borderRadius: 14,
+                  borderLeft: `4px solid ${reached ? '#3FB97A' : CATEGORY_COLORS[selectedCategory]}`,
+                  transition: 'background 0.3s',
                 }}
-              />
-              {goal}
-            </div>
+              >
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 12,
+                }}>
+                  <span style={{ fontWeight: 600, fontSize: 20 }}>
+                    {reached && '✅ '}{t.task}
+                  </span>
+                  <span style={{
+                    fontSize: 18,
+                    color: reached ? '#3FB97A' : '#8B8FA3',
+                    fontWeight: 700,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {count}/{t.frequency}
+                  </span>
+                </div>
 
-            {gTasks.map((t) => {
-              const checks = localChecks[t.id] ?? t.checks
-              const done = checkedCount(checks)
-              const reached = done >= t.frequency
-
-              return (
-                <div
-                  key={t.id}
+                <button
+                  ref={(el) => { btnRefs.current[t.id] = el }}
+                  onClick={() => handleComplete(t)}
+                  disabled={isLoading}
                   style={{
-                    padding: '10px 12px',
-                    marginBottom: 6,
-                    background: reached ? '#1A2A1A' : '#2A2E3C',
+                    width: '100%',
+                    padding: '14px 0',
+                    fontSize: 20,
+                    fontWeight: 700,
+                    border: 'none',
                     borderRadius: 10,
-                    borderLeft: `3px solid ${reached ? '#3FB97A' : goalColor(goal)}`,
-                    transition: 'background 0.3s',
+                    background: reached ? '#2A5A2A' : CATEGORY_COLORS[selectedCategory],
+                    color: '#fff',
+                    cursor: isLoading ? 'wait' : 'pointer',
+                    opacity: isLoading ? 0.6 : 1,
+                    transition: 'opacity 0.15s',
                   }}
                 >
-                  {/* 任務名 + 進度 */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <span style={{ fontWeight: 500, fontSize: 14 }}>
-                      {reached && '✅ '}{t.task}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: reached ? '#3FB97A' : '#8B8FA3',
-                        fontWeight: reached ? 700 : 400,
-                      }}
-                    >
-                      {done}/{t.frequency}
-                    </span>
-                  </div>
-
-                  {/* 7 天 checkbox 列 */}
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {DAY_LABELS.map(({ key, label }) => {
-                      const isChecked = !!checks[key]
-                      const isLoading = loading === `${t.id}-${key}`
-
-                      return (
-                        <button
-                          key={key}
-                          ref={(el) => { btnRefs.current[`${t.id}-${key}`] = el }}
-                          onClick={() => toggleCheck(t, key)}
-                          disabled={loading !== null}
-                          style={{
-                            flex: 1,
-                            padding: '4px 0',
-                            fontSize: 11,
-                            fontWeight: isChecked ? 700 : 400,
-                            border: 'none',
-                            borderRadius: 6,
-                            background: isChecked ? '#3FB97A' : '#3A3E4C',
-                            color: isChecked ? '#fff' : '#8B8FA3',
-                            cursor: loading ? 'wait' : 'pointer',
-                            opacity: isLoading ? 0.6 : 1,
-                            transition: 'background 0.15s',
-                          }}
-                        >
-                          {isLoading ? '·' : label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ))
+                  {isLoading ? '...' : '完成 +1'}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
       )}
 
-      {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 40,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '10px 20px',
-            background: toast.isError ? '#FF5252' : '#FFD86B',
-            color: toast.isError ? '#fff' : '#0B1020',
-            borderRadius: 24,
-            fontSize: 16,
-            fontWeight: 700,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-            zIndex: 100,
-          }}
-        >
-          {toast.text}
-        </div>
-      )}
+      {toast && <Toast toast={toast} />}
     </section>
+  )
+}
+
+function Toast({ toast }: { toast: { text: string; isError: boolean } }) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 40,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        padding: '10px 20px',
+        background: toast.isError ? '#FF5252' : '#FFD86B',
+        color: toast.isError ? '#fff' : '#0B1020',
+        borderRadius: 24,
+        fontSize: 16,
+        fontWeight: 700,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+        zIndex: 100,
+      }}
+    >
+      {toast.text}
+    </div>
   )
 }

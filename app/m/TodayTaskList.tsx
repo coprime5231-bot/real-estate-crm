@@ -157,19 +157,27 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
     )
   }
 
+  // Sort: undone first, done last
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const aDone = states[a.eventId]?.done ?? a.isDone
+    const bDone = states[b.eventId]?.done ?? b.isDone
+    if (aDone === bDone) return 0
+    return aDone ? 1 : -1
+  })
+
   return (
     <section style={{ marginBottom: 32 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
+      <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 16 }}>
         今日任務（{tasks.length}）
       </h2>
 
       {tasks.length === 0 ? (
-        <div style={{ color: '#8B8FA3', fontSize: 14 }}>
+        <div style={{ color: '#8B8FA3', fontSize: 16 }}>
           （今天沒有拜訪/覆訪/帶看行程）
         </div>
       ) : (
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          {tasks.map((t) => {
+          {sortedTasks.map((t) => {
             const s = states[t.eventId] ?? { done: t.isDone, loading: null }
             const done = s.done
             const loading = s.loading
@@ -178,12 +186,14 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
               <li
                 key={t.eventId}
                 style={{
-                  padding: '16px 20px',
-                  marginBottom: 10,
+                  padding: done ? '16px 20px' : '32px 40px',
+                  marginBottom: 12,
                   background: done ? '#1E2130' : '#2A2E3C',
-                  borderRadius: 12,
-                  opacity: done ? 0.55 : 1,
-                  transition: 'opacity 0.3s, background 0.3s',
+                  borderRadius: 14,
+                  opacity: done ? 0.6 : 1,
+                  maxHeight: done ? 60 : 'none',
+                  overflow: 'hidden',
+                  transition: 'opacity 0.3s, background 0.3s, max-height 0.4s, padding 0.3s',
                 }}
               >
                 <div
@@ -193,13 +203,13 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                     alignItems: 'baseline',
                   }}
                 >
-                  <div style={{ fontWeight: 600, fontSize: 17 }}>
+                  <div style={{ fontWeight: 600, fontSize: done ? 17 : 24 }}>
                     <span
                       style={{
                         display: 'inline-block',
-                        padding: '1px 6px',
-                        marginRight: 6,
-                        fontSize: 11,
+                        padding: '2px 8px',
+                        marginRight: 8,
+                        fontSize: done ? 11 : 14,
                         borderRadius: 4,
                         background:
                           t.kind === 'viewing' ? '#A060FF' : '#4A9EFF',
@@ -208,32 +218,32 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                     >
                       {KIND_LABEL[t.kind]}
                     </span>
-                    {t.summary}
+                    {done && '✅ '}{t.summary}
                   </div>
-                  <div style={{ fontSize: 13, color: '#8B8FA3' }}>
+                  <div style={{ fontSize: done ? 13 : 16, color: '#8B8FA3', whiteSpace: 'nowrap', marginLeft: 8 }}>
                     {t.timeLabel}
                   </div>
                 </div>
 
-                {t.location && (
+                {!done && t.location && (
                   <div
                     onClick={() => openMaps(t.location!)}
                     style={{
-                      fontSize: 14,
+                      fontSize: 18,
                       color: '#8B8FA3',
-                      marginTop: 6,
+                      marginTop: 8,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 4,
                     }}
                   >
-                    <span style={{ fontSize: 15 }}>📍</span>
+                    <span style={{ fontSize: 18 }}>📍</span>
                     <span style={{ textDecoration: 'underline', textDecorationColor: '#555', textUnderlineOffset: 2 }}>
                       {t.location}
                     </span>
                     {t.distanceKm !== null && (
-                      <span style={{ marginLeft: 6, color: '#FFD86B', fontSize: 14 }}>
+                      <span style={{ marginLeft: 6, color: '#FFD86B', fontSize: 18 }}>
                         {t.distanceKm.toFixed(1)}km
                         {t.distanceBonus > 0 && ` (+${t.distanceBonus})`}
                       </span>
@@ -241,82 +251,80 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                   </div>
                 )}
 
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: 'flex',
-                    gap: 6,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  {isVisit(t.kind)
-                    ? VISIT_BUTTONS.map((b) => (
-                        <button
-                          key={b.action}
-                          ref={(el) => { btnRefs.current[`${t.eventId}-${b.action}`] = el }}
-                          disabled={done || loading !== null}
-                          onClick={() => handleVisit(t, b.action, b.label)}
-                          style={{
-                            flex: 1,
-                            minWidth: 70,
-                            padding: '8px 12px',
-                            fontSize: 14,
-                            border: 'none',
-                            borderRadius: 6,
-                            background:
-                              done
-                                ? '#3A3E4C'
-                                : b.action === 'found'
+                {!done && (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: 'flex',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {isVisit(t.kind)
+                      ? VISIT_BUTTONS.map((b) => (
+                          <button
+                            key={b.action}
+                            ref={(el) => { btnRefs.current[`${t.eventId}-${b.action}`] = el }}
+                            disabled={done || loading !== null}
+                            onClick={() => handleVisit(t, b.action, b.label)}
+                            style={{
+                              flex: 1,
+                              minWidth: 80,
+                              padding: '12px 16px',
+                              fontSize: 20,
+                              border: 'none',
+                              borderRadius: 8,
+                              background:
+                                b.action === 'found'
                                   ? '#4A9EFF'
                                   : '#4A4E5C',
-                            color: done ? '#666' : '#fff',
-                            cursor:
-                              done || loading !== null
-                                ? 'not-allowed'
-                                : 'pointer',
-                            opacity:
-                              loading && loading !== b.action ? 0.5 : 1,
-                            fontWeight: b.action === 'found' ? 700 : 400,
-                          }}
-                        >
-                          {loading === b.action ? '...' : b.label}
-                        </button>
-                      ))
-                    : VIEWING_BUTTONS.map((b) => (
-                        <button
-                          key={b.action}
-                          ref={(el) => { btnRefs.current[`${t.eventId}-${b.action}`] = el }}
-                          disabled={done || loading !== null}
-                          onClick={() =>
-                            handleViewing(t, b.action, b.label)
-                          }
-                          style={{
-                            flex: 1,
-                            minWidth: 70,
-                            padding: '8px 12px',
-                            fontSize: 14,
-                            border: 'none',
-                            borderRadius: 6,
-                            background:
-                              done
-                                ? '#3A3E4C'
-                                : b.action === 'yes'
+                              color: '#fff',
+                              cursor:
+                                loading !== null
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                              opacity:
+                                loading && loading !== b.action ? 0.5 : 1,
+                              fontWeight: b.action === 'found' ? 700 : 400,
+                            }}
+                          >
+                            {loading === b.action ? '...' : b.label}
+                          </button>
+                        ))
+                      : VIEWING_BUTTONS.map((b) => (
+                          <button
+                            key={b.action}
+                            ref={(el) => { btnRefs.current[`${t.eventId}-${b.action}`] = el }}
+                            disabled={done || loading !== null}
+                            onClick={() =>
+                              handleViewing(t, b.action, b.label)
+                            }
+                            style={{
+                              flex: 1,
+                              minWidth: 80,
+                              padding: '12px 16px',
+                              fontSize: 20,
+                              border: 'none',
+                              borderRadius: 8,
+                              background:
+                                b.action === 'yes'
                                   ? '#A060FF'
                                   : '#4A4E5C',
-                            color: done ? '#666' : '#fff',
-                            cursor:
-                              done || loading !== null
-                                ? 'not-allowed'
-                                : 'pointer',
-                            opacity:
-                              loading && loading !== b.action ? 0.5 : 1,
-                            fontWeight: b.action === 'yes' ? 700 : 400,
-                          }}
-                        >
-                          {loading === b.action ? '...' : b.label}
-                        </button>
-                      ))}
-                </div>
+                              color: '#fff',
+                              cursor:
+                                loading !== null
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                              opacity:
+                                loading && loading !== b.action ? 0.5 : 1,
+                              fontWeight: b.action === 'yes' ? 700 : 400,
+                            }}
+                          >
+                            {loading === b.action ? '...' : b.label}
+                          </button>
+                        ))}
+                  </div>
+                )}
               </li>
             )
           })}

@@ -1,36 +1,29 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 
 const tabs = [
-  { id: 'daily', label: '日任務', icon: '🏠', scrollTo: 'mba-daily' },
-  { id: 'weekly', label: '週任務', icon: '📅', scrollTo: 'mba-weekly' },
-  { id: 'custom', label: '自訂', icon: '➕', scrollTo: null },
-  { id: 'history', label: '歷史', icon: '📊', scrollTo: null },
+  { id: 'daily', label: '日任務', icon: '🏠', href: '/m' },
+  { id: 'weekly', label: '週任務', icon: '📅', href: '/m/weekly' },
+  { id: 'custom', label: '自訂', icon: '➕', href: null },
+  { id: 'history', label: '歷史', icon: '📊', href: null },
 ] as const
 
 export default function MBANav() {
-  const [active, setActive] = useState<string>('daily')
+  const router = useRouter()
+  const pathname = usePathname()
+  const currentTab = pathname === '/m/weekly' ? 'weekly' : 'daily'
   const [toast, setToast] = useState<string | null>(null)
 
   function handleTab(tab: (typeof tabs)[number]) {
-    setActive(tab.id)
-
-    if (!tab.scrollTo) {
+    if (!tab.href) {
       setToast('即將推出')
       setTimeout(() => setToast(null), 1500)
       return
     }
 
-    if (tab.id === 'daily') {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-
-    const el = document.getElementById(tab.scrollTo)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+    router.push(tab.href)
   }
 
   return (
@@ -71,7 +64,7 @@ export default function MBANav() {
         }}
       >
         {tabs.map((tab) => {
-          const isActive = active === tab.id
+          const isActive = currentTab === tab.id
           return (
             <button
               key={tab.id}

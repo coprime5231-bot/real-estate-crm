@@ -1,10 +1,16 @@
 import { headers } from 'next/headers'
-import type { TodayTask } from '@/lib/mba/calendar'
-import SpecialButtons from './SpecialButtons'
-import TodayTaskList from './TodayTaskList'
-import PlayerStatus from './PlayerStatus'
+import WeeklyTaskList from '../WeeklyTaskList'
 
 export const dynamic = 'force-dynamic'
+
+type WeeklyTaskAPI = {
+  id: string
+  task: string
+  goal: string
+  frequency: number
+  count: number
+  bonusClaimed: boolean
+}
 
 async function fetchInternal<T>(path: string, fallback: T): Promise<T> {
   const h = headers()
@@ -25,23 +31,17 @@ async function fetchInternal<T>(path: string, fallback: T): Promise<T> {
   }
 }
 
-async function getTodayTasks(): Promise<TodayTask[]> {
-  const data = await fetchInternal<{ tasks?: TodayTask[] }>('/api/m/calendar/today', {})
+async function getWeeklyTasks(): Promise<WeeklyTaskAPI[]> {
+  const data = await fetchInternal<{ tasks?: WeeklyTaskAPI[] }>('/api/m/tasks/weekly', {})
   return data.tasks ?? []
 }
 
-export default async function MBAHome() {
-  const todayTasks = await getTodayTasks()
+export default async function WeeklyPage() {
+  const tasks = await getWeeklyTasks()
 
   return (
     <main style={{ padding: '24px 20px', maxWidth: 480, margin: '0 auto' }}>
-      <PlayerStatus />
-
-      <SpecialButtons />
-
-      <div id="mba-daily">
-        <TodayTaskList tasks={todayTasks} />
-      </div>
+      <WeeklyTaskList tasks={tasks} />
 
       <footer style={{ marginTop: 40, fontSize: 11, color: '#555', textAlign: 'center' }}>
         MBA Step 8c · 🐈
