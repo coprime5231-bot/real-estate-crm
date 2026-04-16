@@ -53,9 +53,13 @@ export default async function MBAHome() {
 
       <SpecialButtons />
 
-      <TodayTaskList tasks={todayTasks} />
+      <div id="mba-daily">
+        <TodayTaskList tasks={todayTasks} />
+      </div>
 
-      <WeeklyTaskList tasks={weeklyTasks} />
+      <div id="mba-weekly">
+        <WeeklyTaskList tasks={weeklyTasks} />
+      </div>
 
       <footer style={{ marginTop: 40, fontSize: 11, color: '#555', textAlign: 'center' }}>
         MBA Step 8 · 🐈

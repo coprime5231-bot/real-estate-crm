@@ -15,6 +15,9 @@ import {
 export default function Navigation() {
   const pathname = usePathname()
 
+  // MBA 有自己的導航列，隱藏 CRM 導航
+  if (pathname.startsWith('/m')) return null
+
   const tabs = [
     { href: '/', label: '開發', icon: Home },
     { href: '/marketing', label: '行銷', icon: Users },

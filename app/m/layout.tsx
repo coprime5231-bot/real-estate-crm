@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { AnimationProvider } from './AnimationProvider'
+import MBANav from './MBANav'
 
 export const metadata: Metadata = {
   title: 'MBA — 日任務',
@@ -29,9 +30,11 @@ export default function MBALayout({ children }: { children: React.ReactNode }) {
         color: '#F5F5FA',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         WebkitFontSmoothing: 'antialiased',
+        paddingBottom: 80,
       }}
     >
       <AnimationProvider>{children}</AnimationProvider>
+      <MBANav />
     </div>
   )
 }

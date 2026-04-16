@@ -150,6 +150,13 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
   const isVisit = (kind: TaskKind) =>
     kind === 'visit' || kind === 'visit_revisit'
 
+  function openMaps(address: string) {
+    window.open(
+      `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`,
+      '_blank',
+    )
+  }
+
   return (
     <section style={{ marginBottom: 32 }}>
       <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
@@ -171,7 +178,7 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
               <li
                 key={t.eventId}
                 style={{
-                  padding: '12px 14px',
+                  padding: '16px 20px',
                   marginBottom: 10,
                   background: done ? '#1E2130' : '#2A2E3C',
                   borderRadius: 12,
@@ -186,7 +193,7 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                     alignItems: 'baseline',
                   }}
                 >
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>
+                  <div style={{ fontWeight: 600, fontSize: 17 }}>
                     <span
                       style={{
                         display: 'inline-block',
@@ -203,22 +210,30 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                     </span>
                     {t.summary}
                   </div>
-                  <div style={{ fontSize: 12, color: '#8B8FA3' }}>
+                  <div style={{ fontSize: 13, color: '#8B8FA3' }}>
                     {t.timeLabel}
                   </div>
                 </div>
 
                 {t.location && (
                   <div
+                    onClick={() => openMaps(t.location!)}
                     style={{
-                      fontSize: 12,
+                      fontSize: 14,
                       color: '#8B8FA3',
-                      marginTop: 4,
+                      marginTop: 6,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
                     }}
                   >
-                    {t.location}
+                    <span style={{ fontSize: 15 }}>📍</span>
+                    <span style={{ textDecoration: 'underline', textDecorationColor: '#555', textUnderlineOffset: 2 }}>
+                      {t.location}
+                    </span>
                     {t.distanceKm !== null && (
-                      <span style={{ marginLeft: 6, color: '#FFD86B' }}>
+                      <span style={{ marginLeft: 6, color: '#FFD86B', fontSize: 14 }}>
                         {t.distanceKm.toFixed(1)}km
                         {t.distanceBonus > 0 && ` (+${t.distanceBonus})`}
                       </span>
@@ -244,8 +259,8 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                           style={{
                             flex: 1,
                             minWidth: 70,
-                            padding: '6px 10px',
-                            fontSize: 12,
+                            padding: '8px 12px',
+                            fontSize: 14,
                             border: 'none',
                             borderRadius: 6,
                             background:
@@ -278,8 +293,8 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                           style={{
                             flex: 1,
                             minWidth: 70,
-                            padding: '6px 10px',
-                            fontSize: 12,
+                            padding: '8px 12px',
+                            fontSize: 14,
                             border: 'none',
                             borderRadius: 6,
                             background:

@@ -45,6 +45,127 @@ export function useAnimation() {
   return useContext(AnimationContext)
 }
 
+/* ─── Web Audio sound effects ─── */
+
+let _audioCtx: AudioContext | null = null
+function getAudioCtx(): AudioContext {
+  if (!_audioCtx) _audioCtx = new AudioContext()
+  if (_audioCtx.state === 'suspended') _audioCtx.resume()
+  return _audioCtx
+}
+
+function playNote(freq: number, startTime: number, duration: number, type: OscillatorType = 'sine', volume = 0.15) {
+  const ctx = getAudioCtx()
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = type
+  osc.frequency.setValueAtTime(freq, startTime)
+  gain.gain.setValueAtTime(volume, startTime)
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration)
+  osc.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(startTime)
+  osc.stop(startTime + duration)
+}
+
+function playNoise(startTime: number, duration: number, volume = 0.08) {
+  const ctx = getAudioCtx()
+  const bufferSize = ctx.sampleRate * duration
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1
+  const source = ctx.createBufferSource()
+  source.buffer = buffer
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(volume, startTime)
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration)
+  source.connect(gain)
+  gain.connect(ctx.destination)
+  source.start(startTime)
+  source.stop(startTime + duration)
+}
+
+function soundCoinCollect() {
+  const ctx = getAudioCtx()
+  const t = ctx.currentTime
+  playNote(880, t, 0.1, 'square', 0.1)
+  playNote(1320, t + 0.08, 0.15, 'square', 0.1)
+}
+
+function soundMediumCeleb() {
+  const ctx = getAudioCtx()
+  const t = ctx.currentTime
+  // do-mi-sol
+  playNote(523, t, 0.25, 'triangle', 0.15)
+  playNote(659, t + 0.2, 0.25, 'triangle', 0.15)
+  playNote(784, t + 0.4, 0.4, 'triangle', 0.18)
+}
+
+function soundBigCeleb() {
+  const ctx = getAudioCtx()
+  const t = ctx.currentTime
+  // 華麗五連音 + reverb feel
+  playNote(523, t, 0.2, 'triangle', 0.15)
+  playNote(659, t + 0.15, 0.2, 'triangle', 0.15)
+  playNote(784, t + 0.3, 0.2, 'triangle', 0.18)
+  playNote(1047, t + 0.45, 0.3, 'triangle', 0.2)
+  playNote(1319, t + 0.6, 0.6, 'sine', 0.2)
+  // reverb tail
+  playNote(1319, t + 0.8, 0.5, 'sine', 0.08)
+  playNote(1047, t + 1.0, 0.4, 'sine', 0.05)
+}
+
+function soundLegendaryCeleb() {
+  const ctx = getAudioCtx()
+  const t = ctx.currentTime
+  // 煙火爆炸
+  playNoise(t, 0.5, 0.15)
+  playNoise(t + 0.3, 0.4, 0.1)
+  // 勝利號角 fanfare
+  playNote(523, t + 0.5, 0.3, 'square', 0.12)
+  playNote(523, t + 0.8, 0.15, 'square', 0.12)
+  playNote(523, t + 1.0, 0.15, 'square', 0.12)
+  playNote(659, t + 1.2, 0.4, 'square', 0.14)
+  playNote(784, t + 1.6, 0.3, 'triangle', 0.16)
+  playNote(1047, t + 1.9, 0.8, 'triangle', 0.2)
+  // sustain chord
+  playNote(523, t + 2.0, 1.2, 'sine', 0.08)
+  playNote(784, t + 2.0, 1.2, 'sine', 0.08)
+  playNote(1047, t + 2.0, 1.5, 'sine', 0.1)
+  // sparkle tail
+  playNote(2093, t + 2.8, 0.3, 'sine', 0.06)
+  playNote(2637, t + 3.0, 0.4, 'sine', 0.05)
+}
+
+function soundChestGlow() {
+  const ctx = getAudioCtx()
+  const t = ctx.currentTime
+  // 低頻嗡嗡 suspense
+  playNote(80, t, 0.8, 'sine', 0.12)
+  playNote(120, t + 0.3, 0.6, 'sine', 0.1)
+  playNote(160, t + 0.5, 0.5, 'triangle', 0.08)
+}
+
+function soundChestReveal(rarity: ChestRarity) {
+  const ctx = getAudioCtx()
+  const t = ctx.currentTime
+  const isHigh = ['legendary', 'mythic', 'divine', 'eternal'].includes(rarity)
+  if (isHigh) {
+    // 華麗展開音
+    playNote(440, t, 0.15, 'triangle', 0.15)
+    playNote(554, t + 0.1, 0.15, 'triangle', 0.15)
+    playNote(659, t + 0.2, 0.15, 'triangle', 0.18)
+    playNote(880, t + 0.3, 0.2, 'triangle', 0.2)
+    playNote(1109, t + 0.45, 0.4, 'sine', 0.2)
+    playNote(1319, t + 0.6, 0.6, 'sine', 0.18)
+    playNoise(t + 0.3, 0.3, 0.06)
+  } else {
+    // 簡單叮
+    playNote(880, t, 0.15, 'sine', 0.15)
+    playNote(1320, t + 0.12, 0.3, 'sine', 0.12)
+  }
+}
+
 /* ─── Particle helpers ─── */
 
 interface Particle {
@@ -111,6 +232,7 @@ export function AnimationProvider({ children }: { children: ReactNode }) {
 
   /* star burst — 小星星從 (x,y) 噴射 */
   const starBurst = useCallback((x: number, y: number) => {
+    soundCoinCollect()
     const emojis = ['⭐', '✨', '🌟', '💫']
     const newP: Particle[] = Array.from({ length: 10 }, () => {
       const angle = Math.random() * Math.PI * 2
@@ -151,6 +273,12 @@ export function AnimationProvider({ children }: { children: ReactNode }) {
       const c: CelebState = { level, id: nextId() }
       setCeleb(c)
 
+      // 音效
+      if (level === 'legendary') soundLegendaryCeleb()
+      else if (level === 'big') soundBigCeleb()
+      else if (level === 'medium') soundMediumCeleb()
+      else soundCoinCollect()
+
       // 成交用震動
       if (level === 'legendary' && typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate([200, 100, 200, 100, 500])
@@ -174,9 +302,13 @@ export function AnimationProvider({ children }: { children: ReactNode }) {
   const openChest = useCallback((rarity: ChestRarity, reward: number) => {
     const id = nextId()
     setChest({ rarity, reward, id, phase: 'glow' })
+    soundChestGlow()
     // glow → open → reveal → done
     setTimeout(() => setChest((c) => c && c.id === id ? { ...c, phase: 'open' } : c), 800)
-    setTimeout(() => setChest((c) => c && c.id === id ? { ...c, phase: 'reveal' } : c), 1600)
+    setTimeout(() => {
+      setChest((c) => c && c.id === id ? { ...c, phase: 'reveal' } : c)
+      soundChestReveal(rarity)
+    }, 1600)
     setTimeout(() => setChest(null), 4000)
   }, [])
 
@@ -306,7 +438,8 @@ function CelebrationOverlay({ level }: { level: CelebLevel }) {
   const isBig = level === 'big' || isLegendary
   const isMedium = level === 'medium' || isBig
 
-  const starCount = isLegendary ? 60 : isBig ? 35 : isMedium ? 20 : 0
+  // 星星雨粒子加倍
+  const starCount = isLegendary ? 120 : isBig ? 70 : isMedium ? 40 : 0
   const catEmoji = isLegendary ? '🐈' : '😺'
 
   // 煙火只在 legendary
@@ -384,15 +517,15 @@ function CelebrationOverlay({ level }: { level: CelebLevel }) {
         )
       })}
 
-      {/* 貓咪（medium 以上） */}
+      {/* 貓咪（medium 以上）— 置中偏下 */}
       {isMedium && (
         <div
           style={{
             position: 'absolute',
-            bottom: isLegendary ? '15%' : '20%',
+            top: '55%',
             left: '50%',
             transform: 'translateX(-50%)',
-            fontSize: isLegendary ? 80 : isBig ? 64 : 48,
+            fontSize: isLegendary ? 120 : isBig ? 90 : 70,
             animation: isLegendary
               ? 'mba-cat-bounce 0.8s ease-out forwards, mba-cat-dance 1.2s ease-in-out 0.8s infinite'
               : 'mba-cat-bounce 0.8s ease-out forwards',
@@ -404,15 +537,15 @@ function CelebrationOverlay({ level }: { level: CelebLevel }) {
         </div>
       )}
 
-      {/* legendary 文字 */}
+      {/* legendary 文字 — 畫面正中央 */}
       {isLegendary && (
         <div
           style={{
             position: 'absolute',
-            top: '22%',
+            top: '50%',
             left: '50%',
-            transform: 'translateX(-50%)',
-            fontSize: 36,
+            transform: 'translate(-50%, -50%)',
+            fontSize: 56,
             fontWeight: 900,
             color: '#FF8C42',
             textShadow: '0 0 20px rgba(255,140,66,0.6), 0 4px 12px rgba(0,0,0,0.5)',
@@ -420,6 +553,8 @@ function CelebrationOverlay({ level }: { level: CelebLevel }) {
             animation: 'mba-reward-pop 0.6s ease-out forwards',
             pointerEvents: 'none',
             zIndex: 9992,
+            width: '50%',
+            maxWidth: 400,
             background: 'linear-gradient(90deg, #FFD86B, #FF8C42, #FFD86B)',
             backgroundSize: '200% auto',
             WebkitBackgroundClip: 'text',
@@ -436,42 +571,48 @@ function CelebrationOverlay({ level }: { level: CelebLevel }) {
         </div>
       )}
 
-      {/* big 文字（委託/收斡） */}
+      {/* big 文字（委託/收斡）— 畫面正中央 */}
       {isBig && !isLegendary && (
         <div
           style={{
             position: 'absolute',
-            top: '28%',
+            top: '50%',
             left: '50%',
-            transform: 'translateX(-50%)',
-            fontSize: 28,
+            transform: 'translate(-50%, -50%)',
+            fontSize: 42,
             fontWeight: 800,
             color: '#A060FF',
             textShadow: '0 0 16px rgba(160,96,255,0.5)',
+            textAlign: 'center',
             animation: 'mba-reward-pop 0.5s ease-out forwards',
             pointerEvents: 'none',
             zIndex: 9992,
+            width: '50%',
+            maxWidth: 360,
           }}
         >
           🎊 太厲害了！
         </div>
       )}
 
-      {/* medium 文字（找到人了） */}
+      {/* medium 文字（找到人了）— 畫面正中央 */}
       {isMedium && !isBig && (
         <div
           style={{
             position: 'absolute',
-            top: '30%',
+            top: '50%',
             left: '50%',
-            transform: 'translateX(-50%)',
-            fontSize: 24,
+            transform: 'translate(-50%, -50%)',
+            fontSize: 36,
             fontWeight: 700,
             color: '#4A9EFF',
             textShadow: '0 0 12px rgba(74,158,255,0.4)',
+            textAlign: 'center',
             animation: 'mba-reward-pop 0.5s ease-out forwards',
             pointerEvents: 'none',
             zIndex: 9992,
+            width: '50%',
+            maxWidth: 320,
           }}
         >
           找到人了！🎯
