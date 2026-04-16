@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { Client } from '@notionhq/client'
 import { pool, currentQuarter } from '@/lib/mba/db'
 import { getWeekStart } from '@/lib/mba/week-calc'
+import { refreshDailyStats } from '@/lib/mba/daily-stats'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -100,12 +101,20 @@ export async function POST(req: Request) {
         ],
       )
 
+      // 更新全清 / 連擊
+      const daily = await refreshDailyStats().catch((err) => {
+        console.error('[weekly] refreshDailyStats failed', err)
+        return null
+      })
+
       return NextResponse.json({
         ok: true,
         checked: true,
         score: totalScore,
         bonus: bonusScore > 0,
         stars: starsAwarded,
+        fullClear: daily?.fullClear ?? false,
+        streak: daily?.streak ?? 0,
       })
     } else {
       // --- 取消勾 ---
@@ -116,6 +125,11 @@ export async function POST(req: Request) {
         [notionPageId, day, quarter],
       )
       const removed = del.rows[0]
+
+      // 取消勾後重算全清（可能從全清變成非全清）
+      await refreshDailyStats().catch((err) => {
+        console.error('[weekly] refreshDailyStats failed', err)
+      })
 
       return NextResponse.json({
         ok: true,

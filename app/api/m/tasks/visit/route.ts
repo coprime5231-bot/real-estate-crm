@@ -3,6 +3,7 @@ import { pool, currentQuarter } from '@/lib/mba/db'
 import { VISIT_SCORE, distanceBonus as calcDistanceBonus } from '@/lib/mba/scoring'
 import { handleVisitWriteback } from '@/lib/mba/notion-writeback'
 import { updateEventColor } from '@/lib/mba/google-calendar'
+import { refreshDailyStats } from '@/lib/mba/daily-stats'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -83,6 +84,12 @@ export async function POST(req: NextRequest) {
       console.error('[visit] calendar color update failed', err)
     })
 
+    // 更新全清 / 連擊
+    const daily = await refreshDailyStats().catch((err) => {
+      console.error('[visit] refreshDailyStats failed', err)
+      return null
+    })
+
     const row = result.rows[0]
     return NextResponse.json({
       ok: true,
@@ -90,6 +97,8 @@ export async function POST(req: NextRequest) {
       totalScore: row.total_score,
       cardColor: row.card_color,
       notionWriteback: notionOk,
+      fullClear: daily?.fullClear ?? false,
+      streak: daily?.streak ?? 0,
     })
   } catch (err) {
     console.error('[visit] error', err)

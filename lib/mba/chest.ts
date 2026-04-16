@@ -17,14 +17,15 @@ interface ChestTier {
 }
 
 // 機率表（cumulative probability）
+// 2026-04-16 v2：高稀有度機率上調，eternal 0.3%（一季有機會抽到）
 const CHEST_TABLE: ChestTier[] = [
-  { reward: 100, rarity: 'common', cumProb: 0.53889 },
-  { reward: 300, rarity: 'uncommon', cumProb: 0.83889 },
-  { reward: 500, rarity: 'rare', cumProb: 0.93889 },
-  { reward: 800, rarity: 'epic', cumProb: 0.98889 },
-  { reward: 1200, rarity: 'legendary', cumProb: 0.99889 },
-  { reward: 2000, rarity: 'mythic', cumProb: 0.99989 },
-  { reward: 5000, rarity: 'divine', cumProb: 0.99999 },
+  { reward: 100, rarity: 'common', cumProb: 0.502 },
+  { reward: 300, rarity: 'uncommon', cumProb: 0.782 },
+  { reward: 500, rarity: 'rare', cumProb: 0.882 },
+  { reward: 800, rarity: 'epic', cumProb: 0.932 },
+  { reward: 1200, rarity: 'legendary', cumProb: 0.972 },
+  { reward: 2000, rarity: 'mythic', cumProb: 0.987 },
+  { reward: 5000, rarity: 'divine', cumProb: 0.997 },
   { reward: 10000, rarity: 'eternal', cumProb: 1.0 },
 ]
 

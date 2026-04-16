@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool, currentQuarter } from '@/lib/mba/db'
 import { SPECIAL_TASK_MAP, SpecialAction } from '@/lib/mba/scoring'
+import { refreshDailyStats } from '@/lib/mba/daily-stats'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -30,6 +31,11 @@ export async function POST(req: NextRequest) {
        returning id, total_score, card_color, created_at`,
       ['custom_special', action, spec.baseScore, spec.baseScore, spec.cardColor, quarter, spec.stars]
     )
+
+    // 更新全清 / 連擊
+    await refreshDailyStats().catch((err) => {
+      console.error('[special] refreshDailyStats failed', err)
+    })
 
     const row = result.rows[0]
     return NextResponse.json({
