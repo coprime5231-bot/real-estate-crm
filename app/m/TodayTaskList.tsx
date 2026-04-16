@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { TodayTask, TaskKind } from '@/lib/mba/calendar'
+import { useAnimation } from './AnimationProvider'
 
 const KIND_LABEL: Record<TaskKind, string> = {
   visit: '拜訪',
@@ -37,15 +38,8 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
     return init
   })
 
-  const [toast, setToast] = useState<{
-    text: string
-    isError: boolean
-  } | null>(null)
-
-  function showToast(text: string, isError = false) {
-    setToast({ text, isError })
-    setTimeout(() => setToast(null), 2000)
-  }
+  const btnRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const { starBurst, scorePopup, celebrate } = useAnimation()
 
   function setLoading(eventId: string, action: string | null) {
     setStates((prev) => ({
@@ -59,6 +53,17 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
       ...prev,
       [eventId]: { done: true, loading: null },
     }))
+  }
+
+  function triggerAnim(refKey: string, score: number) {
+    const btn = btnRefs.current[refKey]
+    if (btn) {
+      const rect = btn.getBoundingClientRect()
+      const cx = rect.left + rect.width / 2
+      const cy = rect.top + rect.height / 2
+      starBurst(cx, cy)
+      scorePopup(`+${score}`, cx, cy - 10)
+    }
   }
 
   async function handleVisit(
@@ -86,16 +91,22 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
 
       if (data.ok === false && data.reason === 'already_done') {
         setDone(task.eventId)
-        showToast('已經按過了', true)
         return
       }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'failed')
 
       setDone(task.eventId)
-      showToast(`${label} +${data.totalScore}`)
-    } catch (err) {
+
+      // 動畫
+      const refKey = `${task.eventId}-${action}`
+      triggerAnim(refKey, data.totalScore)
+
+      if (action === 'found') {
+        // 找到人了 = 藍卡 → medium 慶祝
+        celebrate('medium')
+      }
+    } catch {
       setLoading(task.eventId, null)
-      showToast(`失敗：${(err as Error).message}`, true)
     }
   }
 
@@ -122,16 +133,17 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
 
       if (data.ok === false && data.reason === 'already_done') {
         setDone(task.eventId)
-        showToast('已經按過了', true)
         return
       }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'failed')
 
       setDone(task.eventId)
-      showToast(`${label} +${data.totalScore}`)
-    } catch (err) {
+
+      // 動畫
+      const refKey = `${task.eventId}-${action}`
+      triggerAnim(refKey, data.totalScore)
+    } catch {
       setLoading(task.eventId, null)
-      showToast(`失敗：${(err as Error).message}`, true)
     }
   }
 
@@ -164,6 +176,7 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                   background: done ? '#1E2130' : '#2A2E3C',
                   borderRadius: 12,
                   opacity: done ? 0.55 : 1,
+                  transition: 'opacity 0.3s, background 0.3s',
                 }}
               >
                 <div
@@ -225,6 +238,7 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                     ? VISIT_BUTTONS.map((b) => (
                         <button
                           key={b.action}
+                          ref={(el) => { btnRefs.current[`${t.eventId}-${b.action}`] = el }}
                           disabled={done || loading !== null}
                           onClick={() => handleVisit(t, b.action, b.label)}
                           style={{
@@ -256,6 +270,7 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                     : VIEWING_BUTTONS.map((b) => (
                         <button
                           key={b.action}
+                          ref={(el) => { btnRefs.current[`${t.eventId}-${b.action}`] = el }}
                           disabled={done || loading !== null}
                           onClick={() =>
                             handleViewing(t, b.action, b.label)
@@ -291,27 +306,6 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
             )
           })}
         </ul>
-      )}
-
-      {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 40,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '10px 20px',
-            background: toast.isError ? '#FF5252' : '#FFD86B',
-            color: toast.isError ? '#fff' : '#0B1020',
-            borderRadius: 24,
-            fontSize: 16,
-            fontWeight: 700,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-            zIndex: 100,
-          }}
-        >
-          {toast.text}
-        </div>
       )}
     </section>
   )

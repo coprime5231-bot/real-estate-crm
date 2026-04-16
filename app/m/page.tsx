@@ -58,7 +58,7 @@ export default async function MBAHome() {
       <WeeklyTaskList tasks={weeklyTasks} />
 
       <footer style={{ marginTop: 40, fontSize: 11, color: '#555', textAlign: 'center' }}>
-        MBA Step 7 · 🐈
+        MBA Step 8 · 🐈
       </footer>
     </main>
   )

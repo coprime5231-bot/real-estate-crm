@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import { useAnimation } from './AnimationProvider'
 
 type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
 
@@ -50,6 +51,8 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
 
   const [loading, setLoading] = useState<string | null>(null) // "pageId-day"
   const [toast, setToast] = useState<{ text: string; isError: boolean } | null>(null)
+  const btnRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const { starBurst, scorePopup, celebrate } = useAnimation()
 
   const showToast = useCallback((text: string, isError = false) => {
     setToast({ text, isError })
@@ -86,9 +89,22 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
       if (!res.ok) throw new Error(data?.error ?? 'failed')
 
       if (newChecked && data.score > 0) {
-        const bonusText = data.bonus ? ` 🎯達標！` : ''
-        const starsText = data.stars > 0 ? ` ⭐+${data.stars}` : ''
-        showToast(`${task.task} +${data.score}${bonusText}${starsText}`)
+        // 動畫
+        const btn = btnRefs.current[loadingKey]
+        if (btn) {
+          const rect = btn.getBoundingClientRect()
+          const cx = rect.left + rect.width / 2
+          const cy = rect.top + rect.height / 2
+          starBurst(cx, cy)
+          scorePopup(`+${data.score}`, cx, cy - 10)
+        }
+
+        if (data.bonus) {
+          // 達標慶祝
+          celebrate('small')
+          const starsText = data.stars > 0 ? ` ⭐+${data.stars}` : ''
+          showToast(`${task.task} 🎯達標！${starsText}`)
+        }
       }
     } catch (err) {
       // Revert optimistic update
@@ -161,6 +177,7 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
                     background: reached ? '#1A2A1A' : '#2A2E3C',
                     borderRadius: 10,
                     borderLeft: `3px solid ${reached ? '#3FB97A' : goalColor(goal)}`,
+                    transition: 'background 0.3s',
                   }}
                 >
                   {/* 任務名 + 進度 */}
@@ -195,6 +212,7 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
                       return (
                         <button
                           key={key}
+                          ref={(el) => { btnRefs.current[`${t.id}-${key}`] = el }}
                           onClick={() => toggleCheck(t, key)}
                           disabled={loading !== null}
                           style={{

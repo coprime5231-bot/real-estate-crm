@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useAnimation } from './AnimationProvider'
 
 interface PlayerData {
   totalScore: number
@@ -19,7 +20,7 @@ interface PlayerData {
 export default function PlayerStatus() {
   const [data, setData] = useState<PlayerData | null>(null)
   const [chestLoading, setChestLoading] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const { openChest } = useAnimation()
 
   const fetchData = useCallback(() => {
     fetch('/api/m/stats/player')
@@ -32,11 +33,6 @@ export default function PlayerStatus() {
     fetchData()
   }, [fetchData])
 
-  function showToast(text: string) {
-    setToast(text)
-    setTimeout(() => setToast(null), 2500)
-  }
-
   async function handleOpenChest() {
     if (chestLoading || !data || data.chestsAvailable < 1) return
     setChestLoading(true)
@@ -47,14 +43,16 @@ export default function PlayerStatus() {
       })
       const result = await res.json()
       if (!res.ok || !result.ok) {
-        showToast(result.reason === 'not_enough_stars' ? '星星不夠！' : '失敗')
         return
       }
-      showToast(`寶箱開出 ${result.reward_score} 分！`)
-      // 重新拉資料（分數、星星都會變）
-      fetchData()
+
+      // 寶箱開啟動畫
+      openChest(result.rarity ?? 'common', result.reward_score ?? 100)
+
+      // 動畫播完後重新拉資料
+      setTimeout(() => fetchData(), 3500)
     } catch {
-      showToast('開寶箱失敗')
+      // silent
     } finally {
       setChestLoading(false)
     }
@@ -171,6 +169,7 @@ export default function PlayerStatus() {
             fontWeight: 700,
             cursor: canOpen && !chestLoading ? 'pointer' : 'not-allowed',
             opacity: chestLoading ? 0.6 : 1,
+            transition: 'transform 0.1s',
           }}
         >
           {chestLoading ? '...' : `開寶箱 ×${data.chestsAvailable}`}
@@ -190,28 +189,6 @@ export default function PlayerStatus() {
         <span>Week {String(data.week).padStart(2, '0')}</span>
         <span>🔥 連擊 {data.streak} 天</span>
       </div>
-
-      {/* Toast */}
-      {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 40,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '10px 20px',
-            background: '#FFD86B',
-            color: '#0B1020',
-            borderRadius: 24,
-            fontSize: 16,
-            fontWeight: 700,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-            zIndex: 100,
-          }}
-        >
-          {toast}
-        </div>
-      )}
     </section>
   )
 }

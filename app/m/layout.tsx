@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { AnimationProvider } from './AnimationProvider'
 
 export const metadata: Metadata = {
   title: 'MBA — 日任務',
@@ -30,7 +31,7 @@ export default function MBALayout({ children }: { children: React.ReactNode }) {
         WebkitFontSmoothing: 'antialiased',
       }}
     >
-      {children}
+      <AnimationProvider>{children}</AnimationProvider>
     </div>
   )
 }
