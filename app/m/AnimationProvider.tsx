@@ -32,6 +32,8 @@ interface AnimCtx {
   celebrate: (level: CelebLevel) => void
   /** 寶箱開啟動畫 */
   openChest: (rarity: ChestRarity, reward: number) => void
+  /** 畫面正中央大星星彈出 */
+  starPopup: (count: number) => void
 }
 
 const AnimationContext = createContext<AnimCtx>({
@@ -39,6 +41,7 @@ const AnimationContext = createContext<AnimCtx>({
   scorePopup: () => {},
   celebrate: () => {},
   openChest: () => {},
+  starPopup: () => {},
 })
 
 export function useAnimation() {
@@ -187,6 +190,11 @@ interface ScoreFloat {
   y: number
 }
 
+interface StarPopupState {
+  id: number
+  count: number
+}
+
 interface CelebState {
   level: CelebLevel
   id: number
@@ -227,6 +235,7 @@ export function AnimationProvider({ children }: { children: ReactNode }) {
   const [scores, setScores] = useState<ScoreFloat[]>([])
   const [celeb, setCeleb] = useState<CelebState | null>(null)
   const [chest, setChest] = useState<ChestState | null>(null)
+  const [starPop, setStarPop] = useState<StarPopupState | null>(null)
 
   const celebTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -312,7 +321,15 @@ export function AnimationProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setChest(null), 4000)
   }, [])
 
-  const ctx: AnimCtx = { starBurst, scorePopup, celebrate, openChest }
+  /* star popup — 畫面正中央大星星 ⭐ ×N */
+  const starPopup = useCallback((count: number) => {
+    const id = nextId()
+    setStarPop({ id, count })
+    soundMediumCeleb()
+    setTimeout(() => setStarPop((s) => s && s.id === id ? null : s), 2200)
+  }, [])
+
+  const ctx: AnimCtx = { starBurst, scorePopup, celebrate, openChest, starPopup }
 
   return (
     <AnimationContext.Provider value={ctx}>
@@ -371,6 +388,13 @@ export function AnimationProvider({ children }: { children: ReactNode }) {
           0% { background-position: -200% center; }
           100% { background-position: 200% center; }
         }
+        @keyframes mba-star-center {
+          0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+          20% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+          30% { transform: translate(-50%, -50%) scale(1); }
+          75% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+        }
       `}</style>
 
       {/* ─── Star particles ─── */}
@@ -426,6 +450,36 @@ export function AnimationProvider({ children }: { children: ReactNode }) {
           phase={chest.phase}
           key={chest.id}
         />
+      )}
+
+      {/* ─── Center star popup ─── */}
+      {starPop && (
+        <div
+          key={starPop.id}
+          style={{
+            position: 'fixed',
+            top: '45%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            pointerEvents: 'none',
+            zIndex: 9998,
+            animation: 'mba-star-center 2s ease-out forwards',
+          }}
+        >
+          <span style={{ fontSize: 90, lineHeight: 1 }}>⭐</span>
+          <span style={{
+            fontSize: 48,
+            fontWeight: 900,
+            color: '#FFD86B',
+            textShadow: '0 0 20px rgba(255,216,107,0.6), 0 4px 12px rgba(0,0,0,0.5)',
+            lineHeight: 1,
+          }}>
+            ×{starPop.count}
+          </span>
+        </div>
       )}
     </AnimationContext.Provider>
   )

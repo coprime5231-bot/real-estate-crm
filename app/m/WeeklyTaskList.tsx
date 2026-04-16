@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useAnimation } from './AnimationProvider'
 
 interface WeeklyTask {
@@ -42,14 +42,8 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
     return init
   })
   const [loading, setLoading] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ text: string; isError: boolean } | null>(null)
   const btnRefs = useRef<Record<string, HTMLButtonElement | null>>({})
-  const { starBurst, scorePopup, celebrate } = useAnimation()
-
-  const showToast = useCallback((text: string, isError = false) => {
-    setToast({ text, isError })
-    setTimeout(() => setToast(null), 2000)
-  }, [])
+  const { starBurst, scorePopup, celebrate, starPopup } = useAnimation()
 
   // Group tasks by goal (category)
   const grouped = new Map<Category, WeeklyTask[]>()
@@ -88,7 +82,7 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
       const newCount = (localCounts[task.id] ?? task.count) + 1
       setLocalCounts((prev) => ({ ...prev, [task.id]: newCount }))
 
-      // Animation
+      // Animation: star burst + score popup on the button
       const btn = btnRefs.current[refKey]
       if (btn) {
         const rect = btn.getBoundingClientRect()
@@ -98,14 +92,16 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
         scorePopup(`+${data.score}`, cx, cy - 10)
       }
 
+      // Target reached: center star popup
       if (data.bonus && !localBonus[task.id]) {
         setLocalBonus((prev) => ({ ...prev, [task.id]: true }))
         celebrate('small')
-        const starsText = data.stars > 0 ? ` ⭐+${data.stars}` : ''
-        showToast(`${task.task} 🎯達標！${starsText}`)
+        if (data.stars > 0) {
+          starPopup(data.stars)
+        }
       }
-    } catch (err) {
-      showToast(`失敗：${(err as Error).message}`, true)
+    } catch {
+      // error — no toast, just stop loading
     } finally {
       setLoading(null)
     }
@@ -154,8 +150,6 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
             )
           })}
         </div>
-
-        {toast && <Toast toast={toast} />}
       </section>
     )
   }
@@ -262,31 +256,6 @@ export default function WeeklyTaskList({ tasks }: { tasks: WeeklyTask[] }) {
           })}
         </ul>
       )}
-
-      {toast && <Toast toast={toast} />}
     </section>
-  )
-}
-
-function Toast({ toast }: { toast: { text: string; isError: boolean } }) {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 40,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        padding: '10px 20px',
-        background: toast.isError ? '#FF5252' : '#FFD86B',
-        color: toast.isError ? '#fff' : '#0B1020',
-        borderRadius: 24,
-        fontSize: 16,
-        fontWeight: 700,
-        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-        zIndex: 100,
-      }}
-    >
-      {toast.text}
-    </div>
   )
 }
