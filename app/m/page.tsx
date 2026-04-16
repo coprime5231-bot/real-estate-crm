@@ -1,10 +1,9 @@
-import { getWeekInfo } from '@/lib/mba/week-calc'
 import { headers } from 'next/headers'
 import type { TodayTask } from '@/lib/mba/calendar'
 import SpecialButtons from './SpecialButtons'
 import TodayTaskList from './TodayTaskList'
 import WeeklyTaskList from './WeeklyTaskList'
-import ChestBar from './ChestBar'
+import PlayerStatus from './PlayerStatus'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,22 +45,11 @@ async function getTodayTasks(): Promise<TodayTask[]> {
 }
 
 export default async function MBAHome() {
-  const week = getWeekInfo(new Date())
   const [todayTasks, weeklyTasks] = await Promise.all([getTodayTasks(), getWeeklyTasks()])
 
   return (
     <main style={{ padding: '24px 20px', maxWidth: 480, margin: '0 auto' }}>
-      <header style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 14, color: '#8B8FA3' }}>{week.quarter}</div>
-        <h1 style={{ fontSize: 28, fontWeight: 700, margin: '4px 0' }}>
-          Week {String(week.week).padStart(2, '0')} ⭐
-        </h1>
-        <div style={{ fontSize: 12, color: '#8B8FA3' }}>
-          本季倒數 {week.daysToQuarterEnd} 天
-        </div>
-      </header>
-
-      <ChestBar />
+      <PlayerStatus />
 
       <SpecialButtons />
 
@@ -70,7 +58,7 @@ export default async function MBAHome() {
       <WeeklyTaskList tasks={weeklyTasks} />
 
       <footer style={{ marginTop: 40, fontSize: 11, color: '#555', textAlign: 'center' }}>
-        MBA Step 6 · 🐈
+        MBA Step 7 · 🐈
       </footer>
     </main>
   )
