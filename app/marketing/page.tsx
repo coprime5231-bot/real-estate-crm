@@ -555,6 +555,57 @@ export default function MarketingPage() {
     }
   }
 
+  // D. 快速記錄（洽談/面談）或一般進度送出
+  const handleQuickLogOrProgress = async () => {
+    if (!newProgressText.trim() || !selectedClientId) return
+
+    // 偵測是否為快速記錄（前綴含 📞 洽談 或 🤝 面談）
+    const quickLogMatch = newProgressText.match(/^\[.*?(📞\s*洽談|🤝\s*面談)\]\s*/)
+    if (!quickLogMatch) {
+      // 不是快速記錄 → 走原本的進度流程（含跟進提示）
+      return handleAddProgress()
+    }
+
+    const type = quickLogMatch[1].includes('洽談') ? '洽談' : '面談'
+    const content = newProgressText.slice(quickLogMatch[0].length).trim()
+    if (!content) {
+      toast.error('請在前綴後面補充內容')
+      return
+    }
+
+    setSubmitting('progress')
+    try {
+      const res = await fetch(`/api/clients/${selectedClientId}/quick-log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, content }),
+      })
+      if (!res.ok) throw new Error('API error')
+      const data = await res.json()
+
+      // 更新之前進度
+      setClientBlocks((prev) => [{ id: data.blockId, text: data.text, createdTime: new Date().toISOString() }, ...prev])
+      setNewProgressText('')
+
+      // 更新左側卡片跟進日
+      if (data.newFollowUp) {
+        setClients((prev) =>
+          prev.map((c) => (c.id === selectedClientId ? { ...c, nextFollowUp: data.newFollowUp } : c))
+        )
+        toast.success(`已記錄，下次跟進：${formatDateDisplay(data.newFollowUp)}`)
+      }
+
+      // 容錯 warning
+      if (data.warning) {
+        toast.warning(data.warning)
+      }
+    } catch {
+      toast.error('快速記錄失敗')
+    } finally {
+      setSubmitting(null)
+    }
+  }
+
   // B. 快速設跟進日
   const handleSetFollowUp = async (date: string, time: string) => {
     if (!date || !selectedClientId) return
@@ -1302,9 +1353,34 @@ export default function MarketingPage() {
                       )}
                     </div>
 
-                    {/* ④ 目前進度 + C. 自動設跟進提示 */}
+                    {/* ④ 目前進度 + D. 快速記錄 + C. 自動設跟進提示 */}
                     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                       <h3 className="text-sm font-semibold text-indigo-400 mb-3">目前進度</h3>
+                      {/* D. 快速記錄按鈕 */}
+                      <div className="flex gap-2 mb-2">
+                        <button
+                          onClick={() => {
+                            const now = new Date()
+                            const prefix = `[${now.getMonth() + 1}/${now.getDate()} 📞 洽談] `
+                            setNewProgressText(prefix)
+                            progressInputRef.current?.focus()
+                          }}
+                          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded transition-colors"
+                        >
+                          📞 洽談
+                        </button>
+                        <button
+                          onClick={() => {
+                            const now = new Date()
+                            const prefix = `[${now.getMonth() + 1}/${now.getDate()} 🤝 面談] `
+                            setNewProgressText(prefix)
+                            progressInputRef.current?.focus()
+                          }}
+                          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded transition-colors"
+                        >
+                          🤝 面談
+                        </button>
+                      </div>
                       <div className="flex gap-2">
                         <input
                           ref={progressInputRef}
@@ -1312,11 +1388,11 @@ export default function MarketingPage() {
                           placeholder="輸入今天的進度..."
                           value={newProgressText}
                           onChange={(e) => setNewProgressText(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddProgress()}
+                          onKeyDown={(e) => e.key === 'Enter' && handleQuickLogOrProgress()}
                           className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                         />
                         <button
-                          onClick={handleAddProgress}
+                          onClick={handleQuickLogOrProgress}
                           disabled={submitting === 'progress' || !newProgressText.trim()}
                           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm rounded transition-colors"
                         >
