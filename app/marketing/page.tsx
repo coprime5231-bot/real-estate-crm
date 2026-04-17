@@ -116,8 +116,8 @@ export default function MarketingPage() {
   const [newProgressText, setNewProgressText] = useState('')
   const [submitting, setSubmitting] = useState<string | null>(null)
 
-  // === C. 今日聚焦篩選 ===
-  const [focusFilter, setFocusFilter] = useState<'overdue' | 'today' | 'frozen' | 'noStep' | null>(null)
+  // === Q1. 逾期篩選（點頂部「逾期」計數切換） ===
+  const [focusFilter, setFocusFilter] = useState<'overdue' | null>(null)
 
   // === A1. 頂部收合 ===
   const [importantCollapsed, setImportantCollapsed] = useState(() => {
@@ -134,6 +134,11 @@ export default function MarketingPage() {
   const [quickTodoText, setQuickTodoText] = useState('')
   const [quickImportantBound, setQuickImportantBound] = useState(true) // 是否綁定選中客戶
   const [quickTodoBound, setQuickTodoBound] = useState(true)
+  // R2: 頂部快速輸入的日期/時間（重要事項 + 待辦各一組）
+  const [quickImportantDate, setQuickImportantDate] = useState('')
+  const [quickImportantTime, setQuickImportantTime] = useState('')
+  const [quickTodoDate, setQuickTodoDate] = useState('')
+  const [quickTodoTime, setQuickTodoTime] = useState('')
 
   // === A3. 待辦動畫 ===
   const [todoAnimPhase, setTodoAnimPhase] = useState<Record<string, 'idle' | 'checked' | 'strikethrough' | 'fading'>>({})
@@ -249,15 +254,9 @@ export default function MarketingPage() {
 
     filtered = filtered.filter((c) => gradeMatches(c.grade, selectedGrade))
 
-    // C. 今日聚焦篩選（與等級篩選疊加）
+    // Q1. 逾期篩選（點頂部「逾期」計數切換）
     if (focusFilter === 'overdue') {
       filtered = filtered.filter((c) => isOverdue(c.nextFollowUp))
-    } else if (focusFilter === 'today') {
-      filtered = filtered.filter((c) => c.nextFollowUp && daysUntil(c.nextFollowUp) === 0)
-    } else if (focusFilter === 'frozen') {
-      filtered = filtered.filter((c) => c.slaStatus === 'frozen')
-    } else if (focusFilter === 'noStep') {
-      filtered = filtered.filter((c) => !c.nextFollowUp)
     }
 
     filtered.sort((a, b) => {
@@ -281,12 +280,19 @@ export default function MarketingPage() {
     if (!quickImportantText.trim()) return
     const clientId = quickImportantBound && selectedClientId ? selectedClientId : undefined
     const clientName = clientId ? selectedClient?.name : undefined
+
+    // 有選日期時間 → 附在標題後面（重要事項 API 沒有日期欄位）
+    const d = quickImportantDate ? new Date(quickImportantDate) : null
+    const timeSuffix = quickImportantTime ? ` ${quickImportantTime}` : ''
+    const dateSuffix = d ? ` (${d.getMonth() + 1}/${d.getDate()}${timeSuffix})` : ''
+    const fullTitle = quickImportantText.trim() + dateSuffix
+
     try {
       const res = await fetch('/api/important-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: quickImportantText.trim(),
+          title: fullTitle,
           clientId,
           clientName: clientName || '',
           source: 'buyer',
@@ -299,11 +305,13 @@ export default function MarketingPage() {
         setClientImportantItems((prev) => [item, ...prev])
       }
       setQuickImportantText('')
+      setQuickImportantDate('')
+      setQuickImportantTime('')
       toast.success('已新增重要事項')
     } catch {
       toast.error('新增重要事項失敗')
     }
-  }, [quickImportantText, quickImportantBound, selectedClientId, selectedClient])
+  }, [quickImportantText, quickImportantBound, quickImportantDate, quickImportantTime, selectedClientId, selectedClient])
 
   // === A2. 快速新增待辦（頂部） ===
   const handleQuickAddTodo = useCallback(async () => {
@@ -311,13 +319,20 @@ export default function MarketingPage() {
     const clientId = quickTodoBound && selectedClientId ? selectedClientId : undefined
     const clientName = clientId ? selectedClient?.name : undefined
     const today = new Date()
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const dateStr = quickTodoDate || todayStr
+
+    // 標題附加 (M/D HH:MM) 讓列表顯示日期狀態（與客戶卡一致）
+    const d = new Date(dateStr)
+    const timeSuffix = quickTodoTime ? ` ${quickTodoTime}` : ''
+    const fullTitle = `${quickTodoText.trim()} (${d.getMonth() + 1}/${d.getDate()}${timeSuffix})`
+
     try {
       const res = await fetch('/api/todo-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: quickTodoText.trim(),
+          title: fullTitle,
           date: dateStr,
           clientId,
           clientName: clientName || '',
@@ -326,12 +341,29 @@ export default function MarketingPage() {
       if (!res.ok) throw new Error('API error')
       const item = await res.json()
       setTodoItems((prev) => [item, ...prev])
+
+      // 有指定日期時間 → 建 Google Calendar 事件
+      if (quickTodoDate && selectedClient) {
+        const calendarDate = composeDatetime(quickTodoDate, quickTodoTime)
+        fetch('/api/calendar/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            summary: `[${selectedClient.name}] ${quickTodoText.trim()}`,
+            date: calendarDate,
+            description: `CRM 待辦 - 客戶：${selectedClient.name}`,
+          }),
+        }).catch((err) => console.error('Calendar event error:', err))
+      }
+
       setQuickTodoText('')
+      setQuickTodoDate('')
+      setQuickTodoTime('')
       toast.success('已新增待辦事項')
     } catch {
       toast.error('新增待辦事項失敗')
     }
-  }, [quickTodoText, quickTodoBound, selectedClientId, selectedClient])
+  }, [quickTodoText, quickTodoBound, quickTodoDate, quickTodoTime, selectedClientId, selectedClient])
 
   // === A3. 動畫版 toggle dashboard 待辦完成 ===
   const handleAnimatedToggleTodo = useCallback(async (todoId: string, title: string) => {
@@ -403,18 +435,6 @@ export default function MarketingPage() {
     () => todoItems.filter((t) => { const d = parseTodoDate(t.title); return d && isToday(d) }).length,
     [todoItems]
   )
-
-  // C. 今日聚焦 badge 數字
-  const focusCounts = useMemo(() => {
-    const overdue = clients.filter((c) => isOverdue(c.nextFollowUp)).length
-    const today = clients.filter((c) => {
-      if (!c.nextFollowUp) return false
-      return daysUntil(c.nextFollowUp) === 0
-    }).length
-    const frozen = clients.filter((c) => c.slaStatus === 'frozen').length
-    const noStep = clients.filter((c) => !c.nextFollowUp).length
-    return { overdue, today, frozen, noStep }
-  }, [clients])
 
   // ===================== 操作 =====================
 
@@ -723,9 +743,22 @@ export default function MarketingPage() {
             {(overdueTodoCount > 0 || overdueClientCount > 0) && (
               <>
                 <span className="text-slate-600">|</span>
-                <span className="text-red-400">
-                  逾期 <span className="font-bold">{overdueTodoCount + overdueClientCount}</span> 件
-                </span>
+                <button
+                  onClick={() => {
+                    setFocusFilter(focusFilter === 'overdue' ? null : 'overdue')
+                    setActiveTab('marketing')
+                  }}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors ${
+                    focusFilter === 'overdue'
+                      ? 'bg-red-600/30 text-red-200 ring-1 ring-red-500/60'
+                      : 'text-red-400 hover:bg-red-900/30'
+                  }`}
+                  title={focusFilter === 'overdue' ? '清除篩選' : '篩選逾期客戶'}
+                >
+                  <span>逾期</span>
+                  <span className="font-bold">{overdueTodoCount + overdueClientCount}</span>
+                  <span>件</span>
+                </button>
               </>
             )}
             <span className="text-slate-600">|</span>
@@ -742,24 +775,12 @@ export default function MarketingPage() {
             {/* === 近期重要事項 === */}
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
               {/* A5: 標題列 + 快速輸入欄（收合時也看得見） */}
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={toggleImportantCollapsed}
-                  className="flex items-center gap-2 shrink-0 group"
-                  aria-label={importantCollapsed ? '展開' : '收合'}
-                >
-                  <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <Star size={14} className="text-amber-400" />
-                    近期重要事項
-                    {importantCollapsed && (
-                      <span className="text-xs text-slate-500 font-normal">({importantItems.length})</span>
-                    )}
-                  </h3>
-                  {importantCollapsed
-                    ? <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                    : <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                  }
-                </button>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2 shrink-0">
+                  <Star size={14} className="text-amber-400" />
+                  近期重要事項
+                  <span className="text-xs text-slate-500 font-normal">({importantItems.length})</span>
+                </h3>
                 <input
                   type="text"
                   placeholder="+ 快速新增..."
@@ -768,6 +789,24 @@ export default function MarketingPage() {
                   onKeyDown={(e) => e.key === 'Enter' && handleQuickAddImportant()}
                   className="flex-1 min-w-0 bg-slate-900/50 border border-slate-600/50 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
                 />
+                <DateTimePopover
+                  date={quickImportantDate}
+                  time={quickImportantTime}
+                  onChange={(d, t) => { setQuickImportantDate(d); setQuickImportantTime(t) }}
+                  align="right"
+                  title="重要事項日期時間"
+                />
+                <button
+                  onClick={toggleImportantCollapsed}
+                  className="p-1.5 border border-slate-600 hover:border-indigo-500 bg-slate-900 text-slate-300 hover:text-indigo-400 rounded transition-colors shrink-0"
+                  aria-label={importantCollapsed ? '展開' : '收合'}
+                  title={importantCollapsed ? '展開' : '收合'}
+                >
+                  {importantCollapsed
+                    ? <ChevronRight size={14} />
+                    : <ChevronDown size={14} />
+                  }
+                </button>
               </div>
 
               {selectedClientId && selectedClient && quickImportantBound && (
@@ -791,16 +830,29 @@ export default function MarketingPage() {
                     <p className="text-xs text-slate-500">目前沒有重要事項</p>
                   ) : (
                     <div className="space-y-2">
-                      {importantItems.map((item) => (
-                        <div
-                          key={item.id}
-                          onClick={() => handleJumpToClient(item.clientId, item.source)}
-                          className="text-sm text-slate-300 hover:text-indigo-400 cursor-pointer transition-colors flex items-start gap-2"
-                        >
-                          <span className="text-indigo-400 font-medium shrink-0">[{item.clientName}]</span>
-                          <span className="truncate">{item.title}</span>
-                        </div>
-                      ))}
+                      {importantItems.map((item) => {
+                        const hasClient = Boolean(item.clientId) && item.clientName !== '未關聯'
+                        return (
+                          <div key={item.id} className="flex items-start gap-2 text-sm group">
+                            <div
+                              onClick={() => hasClient && handleJumpToClient(item.clientId, item.source)}
+                              className={`flex-1 min-w-0 text-slate-300 ${hasClient ? 'hover:text-indigo-400 cursor-pointer' : ''} transition-colors flex items-start gap-2`}
+                            >
+                              {hasClient && (
+                                <span className="text-indigo-400 font-medium shrink-0">[{item.clientName}]</span>
+                              )}
+                              <span className="truncate">{item.title}</span>
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleCompleteImportant(item.id) }}
+                              className="text-xs text-slate-500 hover:text-green-400 transition-colors shrink-0"
+                              title="標記完成"
+                            >
+                              完成
+                            </button>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -810,24 +862,12 @@ export default function MarketingPage() {
             {/* === 待辦事項 === */}
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
               {/* A5: 標題列 + 快速輸入欄（收合時也看得見） */}
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={toggleTodoCollapsed}
-                  className="flex items-center gap-2 shrink-0 group"
-                  aria-label={todoCollapsed ? '展開' : '收合'}
-                >
-                  <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <CheckSquare size={14} className="text-green-400" />
-                    待辦事項
-                    {todoCollapsed && (
-                      <span className="text-xs text-slate-500 font-normal">({todoItems.length})</span>
-                    )}
-                  </h3>
-                  {todoCollapsed
-                    ? <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                    : <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                  }
-                </button>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2 shrink-0">
+                  <CheckSquare size={14} className="text-green-400" />
+                  待辦事項
+                  <span className="text-xs text-slate-500 font-normal">({todoItems.length})</span>
+                </h3>
                 <input
                   type="text"
                   placeholder="+ 快速新增（預設今天）..."
@@ -836,6 +876,24 @@ export default function MarketingPage() {
                   onKeyDown={(e) => e.key === 'Enter' && handleQuickAddTodo()}
                   className="flex-1 min-w-0 bg-slate-900/50 border border-slate-600/50 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
                 />
+                <DateTimePopover
+                  date={quickTodoDate}
+                  time={quickTodoTime}
+                  onChange={(d, t) => { setQuickTodoDate(d); setQuickTodoTime(t) }}
+                  align="right"
+                  title="待辦日期時間"
+                />
+                <button
+                  onClick={toggleTodoCollapsed}
+                  className="p-1.5 border border-slate-600 hover:border-indigo-500 bg-slate-900 text-slate-300 hover:text-indigo-400 rounded transition-colors shrink-0"
+                  aria-label={todoCollapsed ? '展開' : '收合'}
+                  title={todoCollapsed ? '展開' : '收合'}
+                >
+                  {todoCollapsed
+                    ? <ChevronRight size={14} />
+                    : <ChevronDown size={14} />
+                  }
+                </button>
               </div>
 
               {selectedClientId && selectedClient && quickTodoBound && (
@@ -883,12 +941,14 @@ export default function MarketingPage() {
                                 )}
                               </button>
                               <div
-                                onClick={() => handleJumpToClient(item.clientId, item.source)}
-                                className={`flex-1 cursor-pointer hover:text-indigo-400 transition-all duration-300 ${
+                                onClick={() => item.clientId && handleJumpToClient(item.clientId, item.source)}
+                                className={`flex-1 ${item.clientId ? 'cursor-pointer hover:text-indigo-400' : ''} transition-all duration-300 ${
                                   phase === 'strikethrough' || phase === 'fading' ? 'line-through text-slate-500' : ''
                                 }`}
                               >
-                                <span className="text-indigo-400 font-medium">[{item.clientName}]</span>{' '}
+                                {item.clientId && item.clientName !== '未關聯' && (
+                                  <><span className="text-indigo-400 font-medium">[{item.clientName}]</span>{' '}</>
+                                )}
                                 <span className={phase !== 'idle' ? 'text-slate-500' : style.text}>{item.title}</span>
                                 {phase === 'idle' && style.badge && (
                                   <span className="ml-2 text-[10px] bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded">
@@ -907,44 +967,6 @@ export default function MarketingPage() {
             </div>
 
           </div>
-        </div>
-      </div>
-
-      {/* ===== C. 今日聚焦橫幅 ===== */}
-      <div className="border-b border-slate-700 bg-slate-800/20">
-        <div className="max-w-7xl mx-auto px-6 py-2.5">
-          {focusCounts.overdue === 0 && focusCounts.today === 0 && focusCounts.frozen === 0 && focusCounts.noStep === 0 ? (
-            <p className="text-sm text-slate-500 text-center">今天沒有待處理事項</p>
-          ) : (
-            <div className="flex items-center gap-4 text-sm">
-              {([
-                { key: 'overdue' as const, emoji: '🔴', label: '逾期跟進', count: focusCounts.overdue },
-                { key: 'today' as const, emoji: '🟠', label: '今日到期', count: focusCounts.today },
-                { key: 'frozen' as const, emoji: '🧊', label: '失聯警示', count: focusCounts.frozen },
-                { key: 'noStep' as const, emoji: '⚠️', label: '沒下一步', count: focusCounts.noStep },
-              ]).map(({ key, emoji, label, count }, i) => (
-                <span key={key} className="flex items-center gap-1">
-                  {i > 0 && <span className="text-slate-600 mr-3">|</span>}
-                  <button
-                    onClick={() => count > 0 && setFocusFilter(focusFilter === key ? null : key)}
-                    disabled={count === 0}
-                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-colors ${
-                      focusFilter === key
-                        ? 'bg-indigo-600/30 text-indigo-300'
-                        : count > 0
-                        ? 'hover:bg-slate-700/50 text-slate-300 cursor-pointer'
-                        : 'text-slate-600 cursor-default'
-                    }`}
-                  >
-                    <span>{emoji}</span>
-                    <span>{label}</span>
-                    <span className="font-bold">{count}</span>
-                    <span>人</span>
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
@@ -980,15 +1002,14 @@ export default function MarketingPage() {
         {/* --- 行銷 Tab --- */}
         {activeTab === 'marketing' && (
           <div>
-            {/* C. 篩選狀態條 */}
-            {focusFilter && (
-              <div className="px-6 py-2 border-b border-indigo-700/30 bg-indigo-900/10 flex items-center gap-2 text-sm">
-                <span className="text-indigo-300">
-                  篩選中：{focusFilter === 'overdue' ? '逾期跟進' : focusFilter === 'today' ? '今日到期' : focusFilter === 'frozen' ? '失聯警示' : '沒下一步'}
-                </span>
+            {/* Q1. 篩選狀態條 */}
+            {focusFilter === 'overdue' && (
+              <div className="px-6 py-2 border-b border-red-700/30 bg-red-900/10 flex items-center gap-2 text-sm">
+                <span className="text-red-300">篩選中：逾期跟進</span>
                 <button
                   onClick={() => setFocusFilter(null)}
                   className="text-slate-400 hover:text-white transition-colors"
+                  title="清除篩選"
                 >
                   <X size={14} />
                 </button>
@@ -1060,45 +1081,38 @@ export default function MarketingPage() {
                             : 'border-l-transparent hover:bg-slate-800/50'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-white text-sm flex items-center gap-1.5">
+                        <div className="flex items-center justify-between mb-1 gap-2">
+                          <span className="font-medium text-white text-sm flex items-center gap-1.5 min-w-0 flex-1">
                             <span className="relative shrink-0">
                               {getSLAEmoji(client.grade, client.slaStatus)}
                               {client.slaStatus === 'warning' && (
                                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-yellow-400 rounded-full" />
                               )}
                             </span>
-                            {client.name}
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            {/* A. 逾期 badge */}
-                            {overdue && (
-                              <span className="text-[10px] bg-red-900/60 text-red-300 px-1.5 py-0.5 rounded font-medium">
-                                逾期 {Math.abs(days)} 天
+                            <span className="truncate">{client.name}</span>
+                            {client.nextFollowUp && (
+                              <span className={`text-[11px] font-normal shrink-0 ${
+                                overdue ? 'text-red-400 font-medium' :
+                                isTodayFollowUp ? 'text-amber-400 font-medium' :
+                                days <= 3 ? 'text-amber-400' : 'text-slate-500'
+                              }`}>
+                                📅 跟進：{overdue
+                                  ? `逾期 ${Math.abs(days)} 天`
+                                  : isTodayFollowUp
+                                  ? '今天'
+                                  : formatDateDisplay(client.nextFollowUp)}
                               </span>
                             )}
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <span className={`text-[10px] px-1.5 py-0.5 rounded border ${gradeColor}`}>
                               {client.grade || '-'}
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-slate-500">
-                          {client.nextFollowUp && (
-                            <span className={
-                              overdue ? 'text-red-400 font-medium' :
-                              isTodayFollowUp ? 'text-amber-400 font-medium' :
-                              days <= 3 ? 'text-amber-400' : ''
-                            }>
-                              <Calendar size={10} className="inline mr-1" />
-                              {overdue
-                                ? `逾期 ${Math.abs(days)} 天`
-                                : isTodayFollowUp
-                                ? '今天跟進'
-                                : `${days} 天後`}
-                            </span>
-                          )}
-                          {client.area && <span>{client.area}</span>}
-                        </div>
+                        {client.area && (
+                          <div className="text-xs text-slate-500">{client.area}</div>
+                        )}
                       </div>
                     )
                   })
@@ -1169,7 +1183,7 @@ export default function MarketingPage() {
                           </button>
                           {showFollowUpPicker && (
                             <div className="absolute right-0 top-10 z-10 bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-xl">
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 items-center">
                                 <input
                                   type="date"
                                   value={followUpDate}
@@ -1177,13 +1191,33 @@ export default function MarketingPage() {
                                   autoFocus
                                   className="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
                                 />
-                                <input
-                                  type="time"
-                                  value={followUpTime}
-                                  step={900}
-                                  onChange={(e) => setFollowUpTime(e.target.value)}
-                                  className="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-400 focus:outline-none focus:border-indigo-500 w-[90px]"
-                                />
+                                <select
+                                  value={followUpTime ? followUpTime.split(':')[0] : ''}
+                                  onChange={(e) => {
+                                    const hh = e.target.value
+                                    const mm = followUpTime ? followUpTime.split(':')[1] || '00' : '00'
+                                    setFollowUpTime(hh ? `${hh}:${mm}` : '')
+                                  }}
+                                  className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+                                >
+                                  {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).map((h) => (
+                                    <option key={h} value={h}>{h}</option>
+                                  ))}
+                                </select>
+                                <span className="text-slate-500 text-sm">:</span>
+                                <select
+                                  value={followUpTime ? followUpTime.split(':')[1] : ''}
+                                  onChange={(e) => {
+                                    const mm = e.target.value
+                                    const hh = followUpTime ? followUpTime.split(':')[0] : '09'
+                                    setFollowUpTime(mm ? `${hh}:${mm}` : '')
+                                  }}
+                                  className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+                                >
+                                  {['00', '15', '30', '45'].map((m) => (
+                                    <option key={m} value={m}>{m}</option>
+                                  ))}
+                                </select>
                               </div>
                               <div className="flex gap-2 mt-2">
                                 <button
@@ -1343,11 +1377,17 @@ export default function MarketingPage() {
                         <p className="text-xs text-slate-500">尚無進度記錄</p>
                       ) : (
                         <div className="space-y-2">
-                          {clientBlocks.map((block) => (
-                            <p key={block.id} className="text-sm text-slate-400">
-                              {block.text}
-                            </p>
-                          ))}
+                          {[...clientBlocks]
+                            .sort((a, b) => {
+                              const at = a.createdTime ? new Date(a.createdTime).getTime() : 0
+                              const bt = b.createdTime ? new Date(b.createdTime).getTime() : 0
+                              return at - bt
+                            })
+                            .map((block) => (
+                              <p key={block.id} className="text-sm text-slate-400">
+                                {block.text}
+                              </p>
+                            ))}
                         </div>
                       )}
                     </div>

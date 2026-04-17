@@ -21,6 +21,19 @@ export function computeDefaultTime(): string {
   return `${hh}:${mm}`
 }
 
+// 把任意 HH:MM 捨入到最近的 15 分
+function snapTo15(time: string): string {
+  if (!time || !/^\d{1,2}:\d{1,2}$/.test(time)) return time
+  const [hStr, mStr] = time.split(':')
+  let h = parseInt(hStr, 10)
+  let m = Math.round(parseInt(mStr, 10) / 15) * 15
+  if (m === 60) { m = 0; h = (h + 1) % 24 }
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+const MINUTE_OPTIONS = ['00', '15', '30', '45']
+
 // 打開 popover 時若 date/time 為空，自動補預設值
 export function withDefaultsIfEmpty(date: string, time: string) {
   return {
@@ -120,13 +133,33 @@ export default function DateTimePopover({
               autoFocus
               className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
             />
-            <input
-              type="time"
-              value={time}
-              step={900}
-              onChange={(e) => onChange(date, e.target.value)}
-              className="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 w-[100px]"
-            />
+            <div className="flex items-center gap-1">
+              <select
+                value={time ? time.split(':')[0] : ''}
+                onChange={(e) => {
+                  const hh = e.target.value
+                  const mm = time ? snapTo15(time).split(':')[1] : '00'
+                  onChange(date, hh ? `${hh}:${mm}` : '')
+                }}
+                className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">--</option>
+                {HOUR_OPTIONS.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+              <span className="text-slate-500 text-sm">:</span>
+              <select
+                value={time ? snapTo15(time).split(':')[1] : ''}
+                onChange={(e) => {
+                  const mm = e.target.value
+                  const hh = time ? time.split(':')[0] : '09'
+                  onChange(date, mm ? `${hh}:${mm}` : '')
+                }}
+                className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">--</option>
+                {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
           </div>
           <div className="flex items-center justify-between mt-2">
             <button
