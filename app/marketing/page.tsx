@@ -19,6 +19,7 @@ import {
   Video,
   Zap,
   Clock,
+  Eye,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -123,6 +124,17 @@ export default function MarketingPage() {
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
+
+  // === U2. 新增帶看 modal ===
+  const [showViewingModal, setShowViewingModal] = useState(false)
+  const [viewingDate, setViewingDate] = useState('')
+  const [viewingTime, setViewingTime] = useState('')
+  const [viewingLocation, setViewingLocation] = useState('')
+  const [viewingCommunityUrl, setViewingCommunityUrl] = useState('')
+  const [viewingColleagueName, setViewingColleagueName] = useState('')
+  const [viewingColleaguePhone, setViewingColleaguePhone] = useState('')
+  const [viewingNote, setViewingNote] = useState('')
+  const [creatingViewing, setCreatingViewing] = useState(false)
 
   // === A1. 頂部收合 ===
   const [importantCollapsed, setImportantCollapsed] = useState(() => {
@@ -656,6 +668,62 @@ export default function MarketingPage() {
       }
     } finally {
       setSubmitting(null)
+    }
+  }
+
+  // U2: 打開新增帶看 modal（預填預設時間）
+  const openViewingModal = () => {
+    if (!selectedClient) return
+    setViewingDate(formatTodayISO())
+    setViewingTime(computeDefaultTime())
+    setViewingLocation('')
+    setViewingCommunityUrl('')
+    setViewingColleagueName('')
+    setViewingColleaguePhone('')
+    setViewingNote('')
+    setShowViewingModal(true)
+  }
+
+  // U2: 送出新增帶看
+  const handleCreateViewing = async () => {
+    if (!selectedClient) return
+    if (!viewingDate || !viewingTime || !viewingLocation.trim() || !viewingColleagueName.trim() || !viewingColleaguePhone.trim()) {
+      toast.error('請填寫：日期時間、地點、同事名、同事電話')
+      return
+    }
+    const datetime = composeDatetime(viewingDate, viewingTime)
+    setCreatingViewing(true)
+    try {
+      const res = await fetch('/api/viewings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          buyerId: selectedClient.id,
+          buyerName: selectedClient.name,
+          datetime,
+          location: viewingLocation.trim(),
+          communityUrl: viewingCommunityUrl.trim() || undefined,
+          colleagueName: viewingColleagueName.trim(),
+          colleaguePhone: viewingColleaguePhone.trim(),
+          note: viewingNote.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || '新增帶看失敗')
+        if (data.calendarEventId) {
+          // Calendar 已建但 DB 失敗 — 提示使用者
+          toast.warning(`Calendar 事件已建立（${data.calendarEventId}），但資料庫寫入失敗`)
+        }
+        return
+      }
+      toast.success('已新增帶看，Google Calendar 已同步')
+      setShowViewingModal(false)
+    } catch (err: any) {
+      console.error(err)
+      toast.error('新增帶看失敗')
+    } finally {
+      setCreatingViewing(false)
     }
   }
 
@@ -1280,6 +1348,15 @@ export default function MarketingPage() {
                             </div>
                           )}
                         </div>
+                        {/* U2. 新增帶看 */}
+                        <button
+                          onClick={openViewingModal}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-sky-700 hover:bg-sky-600 text-white rounded-lg transition-colors"
+                          title="新增帶看（30 分鐘 Google Calendar 事件）"
+                        >
+                          <Eye size={14} />
+                          新增帶看
+                        </button>
                         {/* ⑤ 開啟 Notion */}
                         <a
                           href={`https://www.notion.so/${selectedClient.id.replace(/-/g, '')}`}
@@ -1543,6 +1620,166 @@ export default function MarketingPage() {
         {/* --- AI Tab --- */}
         {activeTab === 'ai' && <AIPage />}
       </div>
+
+      {/* U2: 新增帶看 Modal */}
+      {showViewingModal && selectedClient && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => !creatingViewing && setShowViewingModal(false)}
+        >
+          <div
+            className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Eye size={18} className="text-sky-400" />
+                新增帶看
+              </h3>
+              <button
+                onClick={() => !creatingViewing && setShowViewingModal(false)}
+                className="text-slate-500 hover:text-white transition-colors"
+                disabled={creatingViewing}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* 1. 帶看客戶 */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-1.5">帶看客戶</label>
+                <div className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-300">
+                  {selectedClient.name}
+                  <span className="text-xs text-slate-500 ml-2">（目前客戶）</span>
+                </div>
+              </div>
+
+              {/* 2. 日期時間 */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-1.5">日期時間 <span className="text-slate-500 text-xs">(30 分鐘事件)</span></label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={viewingDate}
+                    onChange={(e) => setViewingDate(e.target.value)}
+                    className="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                  <select
+                    value={viewingTime ? viewingTime.split(':')[0] : ''}
+                    onChange={(e) => {
+                      const hh = e.target.value
+                      const mm = viewingTime ? viewingTime.split(':')[1] || '00' : '00'
+                      setViewingTime(hh ? `${hh}:${mm}` : '')
+                    }}
+                    className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                  <span className="text-slate-500 text-sm">:</span>
+                  <select
+                    value={viewingTime ? viewingTime.split(':')[1] : ''}
+                    onChange={(e) => {
+                      const mm = e.target.value
+                      const hh = viewingTime ? viewingTime.split(':')[0] : '09'
+                      setViewingTime(mm ? `${hh}:${mm}` : '')
+                    }}
+                    className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+                  >
+                    {['00', '15', '30', '45'].map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* 3. 地點 */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-1.5">地點</label>
+                <input
+                  type="text"
+                  value={viewingLocation}
+                  onChange={(e) => setViewingLocation(e.target.value)}
+                  placeholder="例如：信義區松仁路 10 號"
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* 4. 社區資料連結 */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-1.5">
+                  社區資料連結 <span className="text-slate-500 text-xs">(選填)</span>
+                </label>
+                <input
+                  type="url"
+                  value={viewingCommunityUrl}
+                  onChange={(e) => setViewingCommunityUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* 5 + 6. 同事 */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1.5">同事名</label>
+                  <input
+                    type="text"
+                    value={viewingColleagueName}
+                    onChange={(e) => setViewingColleagueName(e.target.value)}
+                    placeholder="例如：張大明"
+                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1.5">同事電話</label>
+                  <input
+                    type="tel"
+                    value={viewingColleaguePhone}
+                    onChange={(e) => setViewingColleaguePhone(e.target.value)}
+                    placeholder="0912-345-678"
+                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* 7. 備註 */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-1.5">
+                  備註 <span className="text-slate-500 text-xs">(選填)</span>
+                </label>
+                <textarea
+                  value={viewingNote}
+                  onChange={(e) => setViewingNote(e.target.value)}
+                  rows={2}
+                  placeholder="其他需要記錄的事項..."
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end mt-5">
+              <button
+                onClick={() => setShowViewingModal(false)}
+                disabled={creatingViewing}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-300 text-sm rounded transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateViewing}
+                disabled={creatingViewing}
+                className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-sm rounded transition-colors"
+              >
+                <Eye size={14} />
+                {creatingViewing ? '建立中...' : '建立帶看'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* U5: 新增客戶 Modal */}
       {showNewClientModal && (
