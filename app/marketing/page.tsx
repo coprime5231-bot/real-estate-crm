@@ -1082,28 +1082,28 @@ export default function MarketingPage() {
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1 gap-2">
-                          <span className="font-medium text-white text-sm flex items-center gap-1.5 min-w-0 flex-1">
+                          <div className="font-medium text-white text-sm flex items-center gap-1.5 min-w-0 flex-1">
                             <span className="relative shrink-0">
                               {getSLAEmoji(client.grade, client.slaStatus)}
                               {client.slaStatus === 'warning' && (
                                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-yellow-400 rounded-full" />
                               )}
                             </span>
-                            <span className="truncate">{client.name}</span>
+                            <span className="truncate min-w-0">{client.name}</span>
                             {client.nextFollowUp && (
-                              <span className={`text-[11px] font-normal shrink-0 ${
+                              <span className={`text-[11px] font-normal shrink-0 whitespace-nowrap ${
                                 overdue ? 'text-red-400 font-medium' :
                                 isTodayFollowUp ? 'text-amber-400 font-medium' :
                                 days <= 3 ? 'text-amber-400' : 'text-slate-500'
                               }`}>
-                                📅 跟進：{overdue
-                                  ? `逾期 ${Math.abs(days)} 天`
+                                📅{overdue
+                                  ? `逾期${Math.abs(days)}天`
                                   : isTodayFollowUp
                                   ? '今天'
                                   : formatDateDisplay(client.nextFollowUp)}
                               </span>
                             )}
-                          </span>
+                          </div>
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span className={`text-[10px] px-1.5 py-0.5 rounded border ${gradeColor}`}>
                               {client.grade || '-'}
