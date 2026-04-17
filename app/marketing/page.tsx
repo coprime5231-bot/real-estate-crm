@@ -986,8 +986,6 @@ export default function MarketingPage() {
                         <h2 className="text-xl font-bold text-white">{selectedClient.name}</h2>
                         <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
                           {selectedClient.phone && <span>📱 {selectedClient.phone}</span>}
-                          {selectedClient.area && <span>📍 {selectedClient.area}</span>}
-                          {selectedClient.grade && <span>{selectedClient.grade}</span>}
                           {/* A. 跟進逾期提示 */}
                           {isOverdue(selectedClient.nextFollowUp) && (
                             <span className="text-red-400 font-medium flex items-center gap-1">
