@@ -11,11 +11,11 @@ export function formatTodayISO(): string {
   return `${y}-${m}-${day}`
 }
 
-// 現在時間 + 1 小時，捨入到最近 30 分
+// 現在時間 + 1 小時，捨入到最近 15 分
 export function computeDefaultTime(): string {
   const d = new Date()
   d.setHours(d.getHours() + 1)
-  d.setMinutes(Math.round(d.getMinutes() / 30) * 30, 0, 0)
+  d.setMinutes(Math.round(d.getMinutes() / 15) * 15, 0, 0)
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
   return `${hh}:${mm}`
@@ -123,6 +123,7 @@ export default function DateTimePopover({
             <input
               type="time"
               value={time}
+              step={900}
               onChange={(e) => onChange(date, e.target.value)}
               className="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 w-[100px]"
             />

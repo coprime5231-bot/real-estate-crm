@@ -1180,6 +1180,7 @@ export default function MarketingPage() {
                                 <input
                                   type="time"
                                   value={followUpTime}
+                                  step={900}
                                   onChange={(e) => setFollowUpTime(e.target.value)}
                                   className="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-400 focus:outline-none focus:border-indigo-500 w-[90px]"
                                 />
