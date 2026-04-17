@@ -54,6 +54,27 @@ function daysDiff(d: Date): number {
   return Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 }
 
+// 組合日期+時間 → Notion 格式
+function composeDatetime(date: string, time: string): string {
+  if (!date) return ''
+  if (!time) return date // 純日期 2026-04-17
+  return `${date}T${time}:00+08:00` // ISO with timezone
+}
+
+// 顯示日期（有時間 → 4/17 10:30；無時間 → 4/17）
+function formatDateDisplay(dateString?: string): string {
+  if (!dateString) return ''
+  const hasTime = dateString.includes('T')
+  const d = new Date(dateString)
+  const base = `${d.getMonth() + 1}/${d.getDate()}`
+  if (hasTime) {
+    const h = String(d.getHours()).padStart(2, '0')
+    const m = String(d.getMinutes()).padStart(2, '0')
+    return `${base} ${h}:${m}`
+  }
+  return base
+}
+
 export default function MarketingPage() {
   // === 首頁資料 ===
   const [importantItems, setImportantItems] = useState<ImportantItem[]>([])
@@ -80,6 +101,7 @@ export default function MarketingPage() {
   const [newImportantText, setNewImportantText] = useState('')
   const [newTodoText, setNewTodoText] = useState('')
   const [newTodoDate, setNewTodoDate] = useState('')
+  const [newTodoTime, setNewTodoTime] = useState('')
   const [newProgressText, setNewProgressText] = useState('')
   const [submitting, setSubmitting] = useState<string | null>(null)
 
@@ -105,10 +127,12 @@ export default function MarketingPage() {
   // === B. 快速跟進 ===
   const [showFollowUpPicker, setShowFollowUpPicker] = useState(false)
   const [followUpDate, setFollowUpDate] = useState('')
+  const [followUpTime, setFollowUpTime] = useState('')
 
   // === C. 進度後自動設跟進 ===
   const [showFollowUpPrompt, setShowFollowUpPrompt] = useState(false)
   const [promptFollowUpDate, setPromptFollowUpDate] = useState('')
+  const [promptFollowUpTime, setPromptFollowUpTime] = useState('')
 
   const progressInputRef = useRef<HTMLInputElement>(null)
 
@@ -362,6 +386,7 @@ export default function MarketingPage() {
     setNewImportantText('')
     setNewTodoText('')
     setNewTodoDate('')
+    setNewTodoTime('')
     setNewProgressText('')
     setShowFollowUpPicker(false)
     setShowFollowUpPrompt(false)
@@ -415,7 +440,8 @@ export default function MarketingPage() {
       // 如果有選日期，把日期附在標題後面
       const dateStr = newTodoDate
       const d = dateStr ? new Date(dateStr) : null
-      const dateSuffix = d ? ` (${d.getMonth() + 1}/${d.getDate()})` : ''
+      const timeSuffix = newTodoTime ? ` ${newTodoTime}` : ''
+      const dateSuffix = d ? ` (${d.getMonth() + 1}/${d.getDate()}${timeSuffix})` : ''
       const fullTitle = newTodoText.trim() + dateSuffix
 
       const res = await fetch(`/api/clients/${selectedClientId}/todos`, {
@@ -429,19 +455,21 @@ export default function MarketingPage() {
         setNewTodoText('')
 
         // 有選日期 → 建 Google Calendar 事件
-        if (dateStr && selectedClient) {
+        const calendarDate = composeDatetime(dateStr, newTodoTime)
+        if (calendarDate && selectedClient) {
           fetch('/api/calendar/event', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               summary: `[${selectedClient.name}] ${newTodoText.trim()}`,
-              date: dateStr,
+              date: calendarDate,
               description: `CRM 待辦 - 客戶：${selectedClient.name}`,
             }),
           }).catch((err) => console.error('Calendar event error:', err))
         }
 
         setNewTodoDate('')
+        setNewTodoTime('')
         fetchDashboard()
       }
     } finally {
@@ -492,24 +520,26 @@ export default function MarketingPage() {
   }
 
   // B. 快速設跟進日
-  const handleSetFollowUp = async (date: string) => {
+  const handleSetFollowUp = async (date: string, time: string) => {
     if (!date || !selectedClientId) return
     setSubmitting('followup')
+    const value = composeDatetime(date, time)
     try {
       const res = await fetch(`/api/clients/${selectedClientId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nextFollowUp: date }),
+        body: JSON.stringify({ nextFollowUp: value }),
       })
       if (res.ok) {
-        // 更新 client 狀態
         setClients((prev) =>
-          prev.map((c) => (c.id === selectedClientId ? { ...c, nextFollowUp: date } : c))
+          prev.map((c) => (c.id === selectedClientId ? { ...c, nextFollowUp: value } : c))
         )
         setShowFollowUpPicker(false)
         setFollowUpDate('')
+        setFollowUpTime('')
         setShowFollowUpPrompt(false)
         setPromptFollowUpDate('')
+        setPromptFollowUpTime('')
       }
     } finally {
       setSubmitting(null)
@@ -968,7 +998,7 @@ export default function MarketingPage() {
                           {selectedClient.nextFollowUp && !isOverdue(selectedClient.nextFollowUp) && (
                             <span className={daysUntil(selectedClient.nextFollowUp) === 0 ? 'text-amber-400' : 'text-slate-500'}>
                               <Calendar size={12} className="inline mr-1" />
-                              跟進：{formatDate(selectedClient.nextFollowUp)}
+                              跟進：{formatDateDisplay(selectedClient.nextFollowUp)}
                             </span>
                           )}
                         </div>
@@ -985,16 +1015,24 @@ export default function MarketingPage() {
                           </button>
                           {showFollowUpPicker && (
                             <div className="absolute right-0 top-10 z-10 bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-xl">
-                              <input
-                                type="date"
-                                value={followUpDate}
-                                onChange={(e) => setFollowUpDate(e.target.value)}
-                                autoFocus
-                                className="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
-                              />
+                              <div className="flex gap-2">
+                                <input
+                                  type="date"
+                                  value={followUpDate}
+                                  onChange={(e) => setFollowUpDate(e.target.value)}
+                                  autoFocus
+                                  className="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                                />
+                                <input
+                                  type="time"
+                                  value={followUpTime}
+                                  onChange={(e) => setFollowUpTime(e.target.value)}
+                                  className="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-400 focus:outline-none focus:border-indigo-500 w-[90px]"
+                                />
+                              </div>
                               <div className="flex gap-2 mt-2">
                                 <button
-                                  onClick={() => handleSetFollowUp(followUpDate)}
+                                  onClick={() => handleSetFollowUp(followUpDate, followUpTime)}
                                   disabled={!followUpDate || submitting === 'followup'}
                                   className="flex-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs rounded transition-colors"
                                 >
@@ -1089,6 +1127,12 @@ export default function MarketingPage() {
                           value={newTodoDate}
                           onChange={(e) => setNewTodoDate(e.target.value)}
                           className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1 text-xs text-slate-400 focus:outline-none focus:border-indigo-500 shrink-0 w-[130px]"
+                        />
+                        <input
+                          type="time"
+                          value={newTodoTime}
+                          onChange={(e) => setNewTodoTime(e.target.value)}
+                          className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1 text-xs text-slate-400 focus:outline-none focus:border-indigo-500 shrink-0 w-[80px]"
                         />
                         <button
                           onClick={handleAddTodo}
@@ -1189,8 +1233,14 @@ export default function MarketingPage() {
                             autoFocus
                             className="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-amber-500"
                           />
+                          <input
+                            type="time"
+                            value={promptFollowUpTime}
+                            onChange={(e) => setPromptFollowUpTime(e.target.value)}
+                            className="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm text-slate-400 focus:outline-none focus:border-amber-500 w-[80px]"
+                          />
                           <button
-                            onClick={() => handleSetFollowUp(promptFollowUpDate)}
+                            onClick={() => handleSetFollowUp(promptFollowUpDate, promptFollowUpTime)}
                             disabled={!promptFollowUpDate || submitting === 'followup'}
                             className="px-3 py-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs rounded transition-colors"
                           >
