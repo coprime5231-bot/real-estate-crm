@@ -37,6 +37,37 @@ function extractRelation(prop: any): string[] {
   return prop.relation.map((r: any) => r.id).filter(Boolean)
 }
 
+export async function POST(request: NextRequest) {
+  try {
+    const buyerDbId = process.env.NOTION_BUYER_DB_ID
+    if (!buyerDbId) {
+      return NextResponse.json({ error: '未配置買家資料庫ID' }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const name = (body.name || '').trim()
+    if (!name) {
+      return NextResponse.json({ error: '名稱不可為空' }, { status: 400 })
+    }
+
+    const page: any = await notion.pages.create({
+      parent: { database_id: buyerDbId },
+      properties: {
+        '名稱': { title: [{ text: { content: name } }] },
+      },
+    })
+
+    return NextResponse.json({
+      id: page.id,
+      name,
+      notionUrl: page.url || `https://www.notion.so/${page.id.replace(/-/g, '')}`,
+    })
+  } catch (error: any) {
+    console.error('Failed to create client:', error)
+    return NextResponse.json({ error: '無法新增客戶', detail: error?.message }, { status: 500 })
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const buyerDbId = process.env.NOTION_BUYER_DB_ID

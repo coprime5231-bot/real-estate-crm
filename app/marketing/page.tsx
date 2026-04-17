@@ -119,6 +119,11 @@ export default function MarketingPage() {
   // === Q1. 逾期篩選（點頂部「逾期」計數切換） ===
   const [focusFilter, setFocusFilter] = useState<'overdue' | null>(null)
 
+  // === U5. 新增客戶 modal ===
+  const [showNewClientModal, setShowNewClientModal] = useState(false)
+  const [newClientName, setNewClientName] = useState('')
+  const [creatingClient, setCreatingClient] = useState(false)
+
   // === A1. 頂部收合 ===
   const [importantCollapsed, setImportantCollapsed] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('crm.topBar.importantCollapsed') === 'true'
@@ -654,6 +659,34 @@ export default function MarketingPage() {
     }
   }
 
+  // U5: 新增客戶 → 建 Notion 買方、打開 Notion 頁面
+  const handleCreateClient = async () => {
+    const name = newClientName.trim()
+    if (!name) return
+    setCreatingClient(true)
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (!res.ok) throw new Error('API error')
+      const data = await res.json()
+      // 新分頁開啟 Notion 頁面讓使用者繼續補資料
+      if (data.notionUrl) {
+        window.open(data.notionUrl, '_blank', 'noopener,noreferrer')
+      }
+      toast.success(`已新增：${name}`)
+      setShowNewClientModal(false)
+      setNewClientName('')
+      fetchClients()
+    } catch {
+      toast.error('新增客戶失敗')
+    } finally {
+      setCreatingClient(false)
+    }
+  }
+
   // 標記重要大事完成
   const handleCompleteImportant = async (itemId: string) => {
     try {
@@ -1043,7 +1076,14 @@ export default function MarketingPage() {
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
-              <span className="text-xs text-slate-500">{filteredClients.length} 位客戶</span>
+              <button
+                onClick={() => { setNewClientName(''); setShowNewClientModal(true) }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors ml-auto"
+                title="新增客戶"
+              >
+                <Plus size={14} />
+                新增客戶
+              </button>
             </div>
 
             {/* 左側列表 + 右側詳情 */}
@@ -1137,29 +1177,32 @@ export default function MarketingPage() {
                   <div className="p-6 space-y-4">
                     {/* 客戶標頭 + B. 快速跟進按鈕 */}
                     <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                          <span className="relative">
-                            {getSLAEmoji(selectedClient.grade, selectedClient.slaStatus)}
-                            {selectedClient.slaStatus === 'warning' && (
-                              <span className="absolute -top-0.5 -right-1 w-2.5 h-2.5 bg-yellow-400 rounded-full" />
-                            )}
-                          </span>
-                          {selectedClient.name}
-                        </h2>
-                        <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
-                          {selectedClient.phone && <span>📱 {selectedClient.phone}</span>}
-                          {/* A. 跟進逾期提示 */}
+                      <div className="min-w-0 flex-1">
+                        {/* U6: 姓名 + 手機 + 跟進日 同一行 */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h2 className="text-xl font-bold text-white flex items-center gap-2 min-w-0">
+                            <span className="relative shrink-0">
+                              {getSLAEmoji(selectedClient.grade, selectedClient.slaStatus)}
+                              {selectedClient.slaStatus === 'warning' && (
+                                <span className="absolute -top-0.5 -right-1 w-2.5 h-2.5 bg-yellow-400 rounded-full" />
+                              )}
+                            </span>
+                            <span className="truncate">{selectedClient.name}</span>
+                          </h2>
+                          {selectedClient.phone && (
+                            <span className="text-sm text-slate-300 whitespace-nowrap">
+                              📱 {selectedClient.phone}
+                            </span>
+                          )}
                           {isOverdue(selectedClient.nextFollowUp) && (
-                            <span className="text-red-400 font-medium flex items-center gap-1">
+                            <span className="text-sm text-red-400 font-medium flex items-center gap-1 whitespace-nowrap">
                               <AlertTriangle size={14} />
                               跟進逾期 {Math.abs(daysUntil(selectedClient.nextFollowUp))} 天
                             </span>
                           )}
                           {selectedClient.nextFollowUp && !isOverdue(selectedClient.nextFollowUp) && (
-                            <span className={daysUntil(selectedClient.nextFollowUp) === 0 ? 'text-amber-400' : 'text-slate-500'}>
-                              <Calendar size={12} className="inline mr-1" />
-                              跟進：{formatDateDisplay(selectedClient.nextFollowUp)}
+                            <span className={`text-sm whitespace-nowrap ${daysUntil(selectedClient.nextFollowUp) === 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                              📅 跟進：{formatDateDisplay(selectedClient.nextFollowUp)}
                             </span>
                           )}
                         </div>
@@ -1500,6 +1543,66 @@ export default function MarketingPage() {
         {/* --- AI Tab --- */}
         {activeTab === 'ai' && <AIPage />}
       </div>
+
+      {/* U5: 新增客戶 Modal */}
+      {showNewClientModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => !creatingClient && setShowNewClientModal(false)}
+        >
+          <div
+            className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl w-full max-w-md mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Plus size={18} className="text-indigo-400" />
+                新增客戶
+              </h3>
+              <button
+                onClick={() => !creatingClient && setShowNewClientModal(false)}
+                className="text-slate-500 hover:text-white transition-colors"
+                disabled={creatingClient}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <label className="block text-sm text-slate-400 mb-1.5">名稱</label>
+            <input
+              type="text"
+              autoFocus
+              value={newClientName}
+              onChange={(e) => setNewClientName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newClientName.trim() && !creatingClient) handleCreateClient()
+                if (e.key === 'Escape' && !creatingClient) setShowNewClientModal(false)
+              }}
+              placeholder="例如：黃致誠"
+              className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            />
+            <p className="text-xs text-slate-500 mt-2">
+              按「Notion」後會建立新買方並開啟 Notion 頁面，你可以在那邊補填手機、區域、等級等欄位。
+            </p>
+            <div className="flex gap-2 justify-end mt-5">
+              <button
+                onClick={() => setShowNewClientModal(false)}
+                disabled={creatingClient}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-300 text-sm rounded transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateClient}
+                disabled={!newClientName.trim() || creatingClient}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm rounded transition-colors"
+              >
+                <ExternalLink size={14} />
+                {creatingClient ? '建立中...' : 'Notion'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
