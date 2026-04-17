@@ -70,7 +70,7 @@ export async function GET() {
           }
 
           // 反查關聯的買方或委託
-          const buyer = await getRelatedPageTitle(p['買方'])
+          const buyer = await getRelatedPageTitle(p['🤑 買方'])
           const tracking = await getRelatedPageTitle(p['追蹤與委託'])
 
           const source = buyer ? 'buyer' : tracking ? 'tracking' : 'buyer'
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
 
     // 可選：綁定買方
     if (body.clientId) {
-      properties['買方'] = { relation: [{ id: body.clientId }] }
+      properties['🤑 買方'] = { relation: [{ id: body.clientId }] }
     }
 
     const page: any = await notion.pages.create({

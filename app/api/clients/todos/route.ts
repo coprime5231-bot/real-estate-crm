@@ -27,7 +27,7 @@ export async function GET(
     const titleProp = await getTitlePropertyName(todoDbId)
     const response = await notion.databases.query({
       database_id: todoDbId,
-      filter: { property: '買方', relation: { contains: params.id } },
+      filter: { property: '🤑 買方', relation: { contains: params.id } },
     })
     const todos = response.results
       .filter((page: any) => page.object === 'page')
@@ -64,7 +64,7 @@ export async function POST(
     const titleProp = await getTitlePropertyName(todoDbId)
     const properties: any = {
       [titleProp]: { title: [{ text: { content: title } }] },
-      '買方': { relation: [{ id: params.id }] },
+      '🤑 買方': { relation: [{ id: params.id }] },
       '待辦': { checkbox: true },
     }
     if (body.priority) {
