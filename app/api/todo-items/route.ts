@@ -71,7 +71,7 @@ export async function GET() {
 
           // 反查關聯的買方或委託
           const buyer = await getRelatedPageTitle(p['🤑 買方'])
-          const tracking = await getRelatedPageTitle(p['追蹤與委託'])
+          const tracking = await getRelatedPageTitle(p['🤩 追蹤與委託'])
 
           const source = buyer ? 'buyer' : tracking ? 'tracking' : 'buyer'
           const client = buyer || tracking

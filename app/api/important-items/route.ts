@@ -42,8 +42,8 @@ export async function GET() {
         .map(async (page: any) => {
           const p = page.properties
 
-          const buyer = await getRelatedPageTitle(p['買方'])
-          const tracking = await getRelatedPageTitle(p['追蹤與委託'])
+          const buyer = await getRelatedPageTitle(p['🤑 買方'])
+          const tracking = await getRelatedPageTitle(p['🤩 追蹤與委託'])
 
           const source = buyer ? 'buyer' : 'tracking'
           const client = buyer || tracking
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (clientId) {
-      const relationKey = source === 'tracking' ? '追蹤與委託' : '買方'
+      const relationKey = source === 'tracking' ? '🤩 追蹤與委託' : '🤑 買方'
       properties[relationKey] = { relation: [{ id: clientId }] }
     }
 
