@@ -935,7 +935,7 @@ export default function MarketingPage() {
               </div>
 
               {/* 右側詳情面板 */}
-              <div className="flex-1 overflow-hidden flex flex-col">
+              <div className="flex-1 min-h-0 overflow-y-auto">
                 {!selectedClient ? (
                   <div className="flex items-center justify-center h-full text-slate-500">
                     <div className="text-center">
@@ -949,7 +949,7 @@ export default function MarketingPage() {
                     載入中...
                   </div>
                 ) : (
-                  <div className="p-6 flex flex-col gap-4 h-full overflow-hidden">
+                  <div className="p-6 space-y-4">
                     {/* 客戶標頭 + B. 快速跟進按鈕 */}
                     <div className="flex items-center justify-between">
                       <div>
@@ -1024,7 +1024,7 @@ export default function MarketingPage() {
                     </div>
 
                     {/* ① 重要大事 */}
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 shrink-0">
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                       {/* 標題列 + 輸入欄同一行 */}
                       <div className="flex items-center gap-3">
                         <h3 className="text-sm font-semibold text-amber-400 flex items-center gap-2 shrink-0">
@@ -1069,7 +1069,7 @@ export default function MarketingPage() {
                     </div>
 
                     {/* ② 待辦事項（A. 逾期視覺 + D. 今日 highlight） */}
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 shrink-0">
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                       {/* 標題列 + 輸入欄同一行 */}
                       <div className="flex items-center gap-3">
                         <h3 className="text-sm font-semibold text-green-400 flex items-center gap-2 shrink-0">
@@ -1133,9 +1133,9 @@ export default function MarketingPage() {
                       )}
                     </div>
 
-                    {/* ③ 之前進度（flex-1 佔剩餘空間，內部 scroll） */}
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex-1 min-h-0 flex flex-col">
-                      <h3 className="text-sm font-semibold text-slate-400 mb-3 flex items-center gap-2 shrink-0">
+                    {/* ③ 之前進度 */}
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                      <h3 className="text-sm font-semibold text-slate-400 mb-3 flex items-center gap-2">
                         <Clock size={14} />
                         之前進度
                         {clientBlocks.length > 0 && (
@@ -1145,7 +1145,7 @@ export default function MarketingPage() {
                       {clientBlocks.length === 0 ? (
                         <p className="text-xs text-slate-500">尚無進度記錄</p>
                       ) : (
-                        <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
+                        <div className="space-y-2">
                           {clientBlocks.map((block) => (
                             <p key={block.id} className="text-sm text-slate-400">
                               {block.text}
@@ -1156,7 +1156,7 @@ export default function MarketingPage() {
                     </div>
 
                     {/* ④ 目前進度 + C. 自動設跟進提示 */}
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 shrink-0">
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                       <h3 className="text-sm font-semibold text-indigo-400 mb-3">目前進度</h3>
                       <div className="flex gap-2">
                         <input
