@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import { Toaster } from 'sonner'
 import Navigation from '@/components/Navigation'
 import './globals.css'
 
@@ -19,6 +20,7 @@ export default function RootLayout({
     <html lang="zh-TW">
       <body className={`${inter.className} bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white min-h-screen`}>
         <Navigation />
+        <Toaster position="bottom-right" richColors closeButton />
         <main className="max-w-7xl mx-auto">
           {children}
         </main>

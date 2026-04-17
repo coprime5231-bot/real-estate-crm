@@ -1,9 +1,23 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
 
 const TODO_DB_ID = process.env.NOTION_TODO_DB_ID!
 const BUYER_DB_ID = process.env.NOTION_BUYER_DB_ID!
 const TRACKING_DB_ID = process.env.NOTION_TRACKING_DB_ID!
+
+// 快取 title 屬性名稱
+let titlePropName: string | null = null
+async function getTitlePropName(): Promise<string> {
+  if (titlePropName) return titlePropName
+  const db: any = await notion.databases.retrieve({ database_id: TODO_DB_ID })
+  for (const [name, def] of Object.entries(db.properties || {})) {
+    if ((def as any).type === 'title') {
+      titlePropName = name
+      return name
+    }
+  }
+  return 'Name' // fallback
+}
 
 // 從 relation 取第一個關聯頁面的 title
 async function getRelatedPageTitle(relationProp: any): Promise<{ id: string; name: string } | null> {
@@ -85,5 +99,51 @@ export async function GET() {
   } catch (error: any) {
     console.error('Failed to fetch todo items:', error)
     return NextResponse.json({ error: '無法獲取待辦事項', detail: error?.message }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    if (!TODO_DB_ID) {
+      return NextResponse.json({ error: '未配置 NOTION_TODO_DB_ID' }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const title = (body.title || '').trim()
+    if (!title) return NextResponse.json({ error: '標題不可為空' }, { status: 400 })
+
+    const titleKey = await getTitlePropName()
+    const properties: any = {
+      [titleKey]: { title: [{ text: { content: title } }] },
+      '待辦': { checkbox: true },
+    }
+
+    // 日期欄位（預設今天）
+    if (body.date) {
+      properties['日期'] = { date: { start: body.date } }
+    }
+
+    // 可選：綁定買方
+    if (body.clientId) {
+      properties['買方'] = { relation: [{ id: body.clientId }] }
+    }
+
+    const page: any = await notion.pages.create({
+      parent: { database_id: TODO_DB_ID },
+      properties,
+    })
+
+    return NextResponse.json({
+      id: page.id,
+      title,
+      clientName: body.clientName || '未關聯',
+      clientId: body.clientId || '',
+      source: 'buyer',
+      completed: false,
+      createdTime: page.created_time || '',
+    })
+  } catch (error: any) {
+    console.error('Failed to create todo item:', error)
+    return NextResponse.json({ error: '無法新增待辦事項', detail: error?.message }, { status: 500 })
   }
 }

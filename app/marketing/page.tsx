@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   Calendar,
   CalendarPlus,
+  Check,
+  ChevronDown,
   ChevronRight,
   Star,
   CheckSquare,
@@ -19,6 +21,7 @@ import {
   Clock,
   X,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Client, Grade, ImportantItem, TodoItem, Block } from '@/lib/types'
 import { daysUntil, isOverdue, formatDate } from '@/lib/notion'
 import VideosPage from '@/app/videos/page'
@@ -79,6 +82,25 @@ export default function MarketingPage() {
   const [newTodoDate, setNewTodoDate] = useState('')
   const [newProgressText, setNewProgressText] = useState('')
   const [submitting, setSubmitting] = useState<string | null>(null)
+
+  // === A1. 頂部收合 ===
+  const [importantCollapsed, setImportantCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('crm.topBar.importantCollapsed') === 'true'
+    return false
+  })
+  const [todoCollapsed, setTodoCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('crm.topBar.todoCollapsed') === 'true'
+    return false
+  })
+
+  // === A2. 頂部快速輸入 ===
+  const [quickImportantText, setQuickImportantText] = useState('')
+  const [quickTodoText, setQuickTodoText] = useState('')
+  const [quickImportantBound, setQuickImportantBound] = useState(true) // 是否綁定選中客戶
+  const [quickTodoBound, setQuickTodoBound] = useState(true)
+
+  // === A3. 待辦動畫 ===
+  const [todoAnimPhase, setTodoAnimPhase] = useState<Record<string, 'idle' | 'checked' | 'strikethrough' | 'fading'>>({})
 
   // === B. 快速跟進 ===
   const [showFollowUpPicker, setShowFollowUpPicker] = useState(false)
@@ -149,6 +171,23 @@ export default function MarketingPage() {
     }
   }, [selectedClientId, fetchClientDetail])
 
+  // === A1. 收合 localStorage 同步 ===
+  const toggleImportantCollapsed = useCallback(() => {
+    setImportantCollapsed((prev) => {
+      const next = !prev
+      localStorage.setItem('crm.topBar.importantCollapsed', String(next))
+      return next
+    })
+  }, [])
+
+  const toggleTodoCollapsed = useCallback(() => {
+    setTodoCollapsed((prev) => {
+      const next = !prev
+      localStorage.setItem('crm.topBar.todoCollapsed', String(next))
+      return next
+    })
+  }, [])
+
   // ===================== 篩選與排序 =====================
 
   const gradeMatches = (clientGrade: string | undefined, target: Grade | 'all') => {
@@ -188,6 +227,117 @@ export default function MarketingPage() {
     [clients, selectedClientId]
   )
 
+  // === A2. 快速新增重要事項（頂部） ===
+  const handleQuickAddImportant = useCallback(async () => {
+    if (!quickImportantText.trim()) return
+    const clientId = quickImportantBound && selectedClientId ? selectedClientId : undefined
+    const clientName = clientId ? selectedClient?.name : undefined
+    try {
+      const res = await fetch('/api/important-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: quickImportantText.trim(),
+          clientId,
+          clientName: clientName || '',
+          source: 'buyer',
+        }),
+      })
+      if (!res.ok) throw new Error('API error')
+      const item = await res.json()
+      setImportantItems((prev) => [item, ...prev])
+      if (clientId && clientId === selectedClientId) {
+        setClientImportantItems((prev) => [item, ...prev])
+      }
+      setQuickImportantText('')
+      toast.success('已新增重要事項')
+    } catch {
+      toast.error('新增重要事項失敗')
+    }
+  }, [quickImportantText, quickImportantBound, selectedClientId, selectedClient])
+
+  // === A2. 快速新增待辦（頂部） ===
+  const handleQuickAddTodo = useCallback(async () => {
+    if (!quickTodoText.trim()) return
+    const clientId = quickTodoBound && selectedClientId ? selectedClientId : undefined
+    const clientName = clientId ? selectedClient?.name : undefined
+    const today = new Date()
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    try {
+      const res = await fetch('/api/todo-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: quickTodoText.trim(),
+          date: dateStr,
+          clientId,
+          clientName: clientName || '',
+        }),
+      })
+      if (!res.ok) throw new Error('API error')
+      const item = await res.json()
+      setTodoItems((prev) => [item, ...prev])
+      setQuickTodoText('')
+      toast.success('已新增待辦事項')
+    } catch {
+      toast.error('新增待辦事項失敗')
+    }
+  }, [quickTodoText, quickTodoBound, selectedClientId, selectedClient])
+
+  // === A3. 動畫版 toggle dashboard 待辦完成 ===
+  const handleAnimatedToggleTodo = useCallback(async (todoId: string, title: string) => {
+    setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'checked' }))
+
+    try {
+      await fetch(`/api/clients/todos/${todoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ todoFlag: false }),
+      })
+    } catch {
+      setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'idle' }))
+      toast.error('完成失敗，請重試')
+      return
+    }
+
+    setTimeout(() => {
+      setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'strikethrough' }))
+    }, 300)
+
+    setTimeout(() => {
+      setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'fading' }))
+    }, 600)
+
+    setTimeout(() => {
+      setTodoItems((prev) => prev.filter((t) => t.id !== todoId))
+      setTodoAnimPhase((prev) => {
+        const next = { ...prev }
+        delete next[todoId]
+        return next
+      })
+
+      toast.success(`已完成：${title.slice(0, 20)}`, {
+        action: {
+          label: '復原',
+          onClick: async () => {
+            try {
+              await fetch(`/api/clients/todos/${todoId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ todoFlag: true }),
+              })
+              fetchDashboard()
+              toast.success('已復原')
+            } catch {
+              toast.error('復原失敗')
+            }
+          },
+        },
+        duration: 3000,
+      })
+    }, 800)
+  }, [fetchDashboard])
+
   // ===================== 統計（含逾期計算） =====================
 
   const overdueClientCount = useMemo(
@@ -215,6 +365,9 @@ export default function MarketingPage() {
     setNewProgressText('')
     setShowFollowUpPicker(false)
     setShowFollowUpPrompt(false)
+    // A2: 選新客戶時重新啟用綁定
+    setQuickImportantBound(true)
+    setQuickTodoBound(true)
   }
 
   const handleJumpToClient = (clientId: string, source: string) => {
@@ -312,20 +465,6 @@ export default function MarketingPage() {
       }
     } catch (err) {
       console.error('Toggle todo error:', err)
-    }
-  }
-
-  // 切換首頁待辦完成
-  const handleToggleDashboardTodo = async (todoId: string) => {
-    try {
-      await fetch(`/api/clients/todos/${todoId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ todoFlag: false }),
-      })
-      setTodoItems((prev) => prev.filter((t) => t.id !== todoId))
-    } catch (err) {
-      console.error('Toggle dashboard todo error:', err)
     }
   }
 
@@ -478,75 +617,185 @@ export default function MarketingPage() {
           </div>
         </div>
 
-        {/* 兩大欄 */}
+        {/* 兩大欄（A1 收合 + A2 快速輸入） */}
         <div className="max-w-7xl mx-auto px-6 pb-5">
           <div className="grid grid-cols-2 gap-6">
-            {/* 近期重要事項 */}
-            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 max-h-48 overflow-y-auto">
-              <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <Star size={14} className="text-amber-400" />
-                近期重要事項
-              </h3>
-              {loadingDashboard ? (
-                <p className="text-xs text-slate-500">載入中...</p>
-              ) : importantItems.length === 0 ? (
-                <p className="text-xs text-slate-500">目前沒有重要事項 👍</p>
-              ) : (
-                <div className="space-y-2">
-                  {importantItems.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => handleJumpToClient(item.clientId, item.source)}
-                      className="text-sm text-slate-300 hover:text-indigo-400 cursor-pointer transition-colors flex items-start gap-2"
-                    >
-                      <span className="text-indigo-400 font-medium shrink-0">[{item.clientName}]</span>
-                      <span className="truncate">{item.title}</span>
-                    </div>
-                  ))}
+
+            {/* === 近期重要事項 === */}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              {/* A1: 可收合標題 */}
+              <button
+                onClick={toggleImportantCollapsed}
+                className="w-full flex items-center justify-between mb-0 group"
+              >
+                <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                  <Star size={14} className="text-amber-400" />
+                  近期重要事項
+                  {importantCollapsed && (
+                    <span className="text-xs text-slate-500 font-normal">({importantItems.length})</span>
+                  )}
+                </h3>
+                {importantCollapsed
+                  ? <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  : <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
+                }
+              </button>
+
+              {!importantCollapsed && (
+                <div className="mt-3">
+                  {/* A2: 快速輸入欄 */}
+                  <div className="mb-3">
+                    {selectedClientId && selectedClient && quickImportantBound && (
+                      <div className="flex items-center gap-1.5 text-xs text-green-400 mb-1.5">
+                        <Check size={10} />
+                        <span>將記錄到：{selectedClient.name}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setQuickImportantBound(false) }}
+                          className="text-slate-500 hover:text-red-400 transition-colors"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="+ 快速新增重要事項..."
+                      value={quickImportantText}
+                      onChange={(e) => setQuickImportantText(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleQuickAddImportant()}
+                      className="w-full bg-slate-900/50 border border-slate-600/50 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+
+                  {/* 列表 */}
+                  <div className="max-h-36 overflow-y-auto">
+                    {loadingDashboard ? (
+                      <p className="text-xs text-slate-500">載入中...</p>
+                    ) : importantItems.length === 0 ? (
+                      <p className="text-xs text-slate-500">目前沒有重要事項</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {importantItems.map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleJumpToClient(item.clientId, item.source)}
+                            className="text-sm text-slate-300 hover:text-indigo-400 cursor-pointer transition-colors flex items-start gap-2"
+                          >
+                            <span className="text-indigo-400 font-medium shrink-0">[{item.clientName}]</span>
+                            <span className="truncate">{item.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* 待辦事項（D. 今日 highlight + A. 逾期紅色） */}
-            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 max-h-48 overflow-y-auto">
-              <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <CheckSquare size={14} className="text-green-400" />
-                待辦事項
-              </h3>
-              {loadingDashboard ? (
-                <p className="text-xs text-slate-500">載入中...</p>
-              ) : todoItems.length === 0 ? (
-                <p className="text-xs text-slate-500">目前沒有待辦事項 👍</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {todoItems.map((item) => {
-                    const style = getTodoStyle(item.title)
-                    return (
-                      <div key={item.id} className={`flex items-start gap-2 text-sm ${style.bg}`}>
+            {/* === 待辦事項 === */}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              {/* A1: 可收合標題 */}
+              <button
+                onClick={toggleTodoCollapsed}
+                className="w-full flex items-center justify-between mb-0 group"
+              >
+                <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                  <CheckSquare size={14} className="text-green-400" />
+                  待辦事項
+                  {todoCollapsed && (
+                    <span className="text-xs text-slate-500 font-normal">({todoItems.length})</span>
+                  )}
+                </h3>
+                {todoCollapsed
+                  ? <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  : <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
+                }
+              </button>
+
+              {!todoCollapsed && (
+                <div className="mt-3">
+                  {/* A2: 快速輸入欄 */}
+                  <div className="mb-3">
+                    {selectedClientId && selectedClient && quickTodoBound && (
+                      <div className="flex items-center gap-1.5 text-xs text-green-400 mb-1.5">
+                        <Check size={10} />
+                        <span>將記錄到：{selectedClient.name}</span>
                         <button
-                          onClick={() => handleToggleDashboardTodo(item.id)}
-                          className="mt-0.5 text-slate-500 hover:text-green-400 transition-colors shrink-0"
+                          onClick={(e) => { e.stopPropagation(); setQuickTodoBound(false) }}
+                          className="text-slate-500 hover:text-red-400 transition-colors"
                         >
-                          <Square size={14} />
+                          <X size={10} />
                         </button>
-                        <div
-                          onClick={() => handleJumpToClient(item.clientId, item.source)}
-                          className="flex-1 cursor-pointer hover:text-indigo-400 transition-colors"
-                        >
-                          <span className="text-indigo-400 font-medium">[{item.clientName}]</span>{' '}
-                          <span className={style.text}>{item.title}</span>
-                          {style.badge && (
-                            <span className="ml-2 text-[10px] bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded">
-                              {style.badge}
-                            </span>
-                          )}
-                        </div>
                       </div>
-                    )
-                  })}
+                    )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="+ 快速新增待辦（預設今天）..."
+                        value={quickTodoText}
+                        onChange={(e) => setQuickTodoText(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleQuickAddTodo()}
+                        className="flex-1 bg-slate-900/50 border border-slate-600/50 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                      />
+                      <span className="text-[10px] text-slate-500 shrink-0">
+                        （今天 {new Date().getMonth() + 1}/{new Date().getDate()}）
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* A3: 待辦列表（含動畫） */}
+                  <div className="max-h-36 overflow-y-auto">
+                    {loadingDashboard ? (
+                      <p className="text-xs text-slate-500">載入中...</p>
+                    ) : todoItems.length === 0 ? (
+                      <p className="text-xs text-slate-500">目前沒有待辦事項</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {todoItems.map((item) => {
+                          const style = getTodoStyle(item.title)
+                          const phase = todoAnimPhase[item.id] || 'idle'
+                          return (
+                            <div
+                              key={item.id}
+                              className={`flex items-start gap-2 text-sm transition-all duration-200 ${style.bg} ${
+                                phase === 'fading' ? 'opacity-0 max-h-0 overflow-hidden' : 'opacity-100 max-h-20'
+                              }`}
+                            >
+                              <button
+                                onClick={() => handleAnimatedToggleTodo(item.id, item.title)}
+                                disabled={phase !== 'idle'}
+                                className="mt-0.5 shrink-0 transition-colors"
+                              >
+                                {phase === 'idle' ? (
+                                  <Square size={14} className="text-slate-500 hover:text-green-400" />
+                                ) : (
+                                  <CheckSquare size={14} className="text-green-400" />
+                                )}
+                              </button>
+                              <div
+                                onClick={() => handleJumpToClient(item.clientId, item.source)}
+                                className={`flex-1 cursor-pointer hover:text-indigo-400 transition-all duration-300 ${
+                                  phase === 'strikethrough' || phase === 'fading' ? 'line-through text-slate-500' : ''
+                                }`}
+                              >
+                                <span className="text-indigo-400 font-medium">[{item.clientName}]</span>{' '}
+                                <span className={phase !== 'idle' ? 'text-slate-500' : style.text}>{item.title}</span>
+                                {phase === 'idle' && style.badge && (
+                                  <span className="ml-2 text-[10px] bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded">
+                                    {style.badge}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
+
           </div>
         </div>
       </div>
