@@ -26,6 +26,7 @@ import { Client, Grade, SLAStatus, ImportantItem, TodoItem, Block } from '@/lib/
 import { daysUntil, isOverdue, formatDate } from '@/lib/notion'
 import VideosPage from '@/app/videos/page'
 import AIPage from '@/app/ai/page'
+import DateTimePopover, { formatTodayISO, computeDefaultTime } from '@/components/DateTimePopover'
 
 type Tab = 'marketing' | 'entrust' | 'videos' | 'ai'
 
@@ -740,126 +741,118 @@ export default function MarketingPage() {
 
             {/* === 近期重要事項 === */}
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-              {/* A1: 可收合標題 */}
-              <button
-                onClick={toggleImportantCollapsed}
-                className="w-full flex items-center justify-between mb-0 group"
-              >
-                <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                  <Star size={14} className="text-amber-400" />
-                  近期重要事項
-                  {importantCollapsed && (
-                    <span className="text-xs text-slate-500 font-normal">({importantItems.length})</span>
-                  )}
-                </h3>
-                {importantCollapsed
-                  ? <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                  : <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                }
-              </button>
+              {/* A5: 標題列 + 快速輸入欄（收合時也看得見） */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggleImportantCollapsed}
+                  className="flex items-center gap-2 shrink-0 group"
+                  aria-label={importantCollapsed ? '展開' : '收合'}
+                >
+                  <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                    <Star size={14} className="text-amber-400" />
+                    近期重要事項
+                    {importantCollapsed && (
+                      <span className="text-xs text-slate-500 font-normal">({importantItems.length})</span>
+                    )}
+                  </h3>
+                  {importantCollapsed
+                    ? <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
+                    : <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  }
+                </button>
+                <input
+                  type="text"
+                  placeholder="+ 快速新增..."
+                  value={quickImportantText}
+                  onChange={(e) => setQuickImportantText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleQuickAddImportant()}
+                  className="flex-1 min-w-0 bg-slate-900/50 border border-slate-600/50 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {selectedClientId && selectedClient && quickImportantBound && (
+                <div className="flex items-center gap-1.5 text-xs text-green-400 mt-2">
+                  <Check size={10} />
+                  <span>將記錄到：{selectedClient.name}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setQuickImportantBound(false) }}
+                    className="text-slate-500 hover:text-red-400 transition-colors"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
 
               {!importantCollapsed && (
-                <div className="mt-3">
-                  {/* A2: 快速輸入欄 */}
-                  <div className="mb-3">
-                    {selectedClientId && selectedClient && quickImportantBound && (
-                      <div className="flex items-center gap-1.5 text-xs text-green-400 mb-1.5">
-                        <Check size={10} />
-                        <span>將記錄到：{selectedClient.name}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setQuickImportantBound(false) }}
-                          className="text-slate-500 hover:text-red-400 transition-colors"
+                <div className="mt-3 max-h-36 overflow-y-auto">
+                  {loadingDashboard ? (
+                    <p className="text-xs text-slate-500">載入中...</p>
+                  ) : importantItems.length === 0 ? (
+                    <p className="text-xs text-slate-500">目前沒有重要事項</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {importantItems.map((item) => (
+                        <div
+                          key={item.id}
+                          onClick={() => handleJumpToClient(item.clientId, item.source)}
+                          className="text-sm text-slate-300 hover:text-indigo-400 cursor-pointer transition-colors flex items-start gap-2"
                         >
-                          <X size={10} />
-                        </button>
-                      </div>
-                    )}
-                    <input
-                      type="text"
-                      placeholder="+ 快速新增重要事項..."
-                      value={quickImportantText}
-                      onChange={(e) => setQuickImportantText(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleQuickAddImportant()}
-                      className="w-full bg-slate-900/50 border border-slate-600/50 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                    />
-                  </div>
-
-                  {/* 列表 */}
-                  <div className="max-h-36 overflow-y-auto">
-                    {loadingDashboard ? (
-                      <p className="text-xs text-slate-500">載入中...</p>
-                    ) : importantItems.length === 0 ? (
-                      <p className="text-xs text-slate-500">目前沒有重要事項</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {importantItems.map((item) => (
-                          <div
-                            key={item.id}
-                            onClick={() => handleJumpToClient(item.clientId, item.source)}
-                            className="text-sm text-slate-300 hover:text-indigo-400 cursor-pointer transition-colors flex items-start gap-2"
-                          >
-                            <span className="text-indigo-400 font-medium shrink-0">[{item.clientName}]</span>
-                            <span className="truncate">{item.title}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                          <span className="text-indigo-400 font-medium shrink-0">[{item.clientName}]</span>
+                          <span className="truncate">{item.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
             {/* === 待辦事項 === */}
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-              {/* A1: 可收合標題 */}
-              <button
-                onClick={toggleTodoCollapsed}
-                className="w-full flex items-center justify-between mb-0 group"
-              >
-                <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                  <CheckSquare size={14} className="text-green-400" />
-                  待辦事項
-                  {todoCollapsed && (
-                    <span className="text-xs text-slate-500 font-normal">({todoItems.length})</span>
-                  )}
-                </h3>
-                {todoCollapsed
-                  ? <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                  : <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                }
-              </button>
+              {/* A5: 標題列 + 快速輸入欄（收合時也看得見） */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggleTodoCollapsed}
+                  className="flex items-center gap-2 shrink-0 group"
+                  aria-label={todoCollapsed ? '展開' : '收合'}
+                >
+                  <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                    <CheckSquare size={14} className="text-green-400" />
+                    待辦事項
+                    {todoCollapsed && (
+                      <span className="text-xs text-slate-500 font-normal">({todoItems.length})</span>
+                    )}
+                  </h3>
+                  {todoCollapsed
+                    ? <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
+                    : <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  }
+                </button>
+                <input
+                  type="text"
+                  placeholder="+ 快速新增（預設今天）..."
+                  value={quickTodoText}
+                  onChange={(e) => setQuickTodoText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleQuickAddTodo()}
+                  className="flex-1 min-w-0 bg-slate-900/50 border border-slate-600/50 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {selectedClientId && selectedClient && quickTodoBound && (
+                <div className="flex items-center gap-1.5 text-xs text-green-400 mt-2">
+                  <Check size={10} />
+                  <span>將記錄到：{selectedClient.name}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setQuickTodoBound(false) }}
+                    className="text-slate-500 hover:text-red-400 transition-colors"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
 
               {!todoCollapsed && (
                 <div className="mt-3">
-                  {/* A2: 快速輸入欄 */}
-                  <div className="mb-3">
-                    {selectedClientId && selectedClient && quickTodoBound && (
-                      <div className="flex items-center gap-1.5 text-xs text-green-400 mb-1.5">
-                        <Check size={10} />
-                        <span>將記錄到：{selectedClient.name}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setQuickTodoBound(false) }}
-                          className="text-slate-500 hover:text-red-400 transition-colors"
-                        >
-                          <X size={10} />
-                        </button>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="+ 快速新增待辦（預設今天）..."
-                        value={quickTodoText}
-                        onChange={(e) => setQuickTodoText(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleQuickAddTodo()}
-                        className="flex-1 bg-slate-900/50 border border-slate-600/50 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                      />
-                      <span className="text-[10px] text-slate-500 shrink-0">
-                        （今天 {new Date().getMonth() + 1}/{new Date().getDate()}）
-                      </span>
-                    </div>
-                  </div>
-
                   {/* A3: 待辦列表（含動畫） */}
                   <div className="max-h-36 overflow-y-auto">
                     {loadingDashboard ? (
@@ -1161,7 +1154,14 @@ export default function MarketingPage() {
                         {/* B. 設跟進日按鈕 */}
                         <div className="relative">
                           <button
-                            onClick={() => setShowFollowUpPicker(!showFollowUpPicker)}
+                            onClick={() => {
+                              const nextOpen = !showFollowUpPicker
+                              if (nextOpen) {
+                                if (!followUpDate) setFollowUpDate(formatTodayISO())
+                                if (!followUpTime) setFollowUpTime(computeDefaultTime())
+                              }
+                              setShowFollowUpPicker(nextOpen)
+                            }}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-700 hover:bg-amber-600 text-white rounded-lg transition-colors"
                           >
                             <CalendarPlus size={14} />
@@ -1276,17 +1276,15 @@ export default function MarketingPage() {
                           onKeyDown={(e) => e.key === 'Enter' && handleAddTodo()}
                           className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                         />
-                        <input
-                          type="date"
-                          value={newTodoDate}
-                          onChange={(e) => setNewTodoDate(e.target.value)}
-                          className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1 text-xs text-slate-400 focus:outline-none focus:border-indigo-500 shrink-0 w-[130px]"
-                        />
-                        <input
-                          type="time"
-                          value={newTodoTime}
-                          onChange={(e) => setNewTodoTime(e.target.value)}
-                          className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1 text-xs text-slate-400 focus:outline-none focus:border-indigo-500 shrink-0 w-[80px]"
+                        <DateTimePopover
+                          date={newTodoDate}
+                          time={newTodoTime}
+                          onChange={(d, t) => {
+                            setNewTodoDate(d)
+                            setNewTodoTime(t)
+                          }}
+                          align="right"
+                          title="待辦日期時間"
                         />
                         <button
                           onClick={handleAddTodo}
@@ -1297,8 +1295,8 @@ export default function MarketingPage() {
                         </button>
                       </div>
                       {newTodoDate && (
-                        <p className="text-xs text-slate-500 mt-1.5 ml-[100px]">
-                          📅 將同步建立 Google Calendar 事件
+                        <p className="text-xs text-slate-500 mt-1.5">
+                          📅 {newTodoDate}{newTodoTime ? ` ${newTodoTime}` : ''}・將同步建立 Google Calendar 事件
                         </p>
                       )}
                       {/* 列表 */}
@@ -1405,23 +1403,26 @@ export default function MarketingPage() {
                         <div className="mt-3 bg-amber-900/20 border border-amber-700/50 rounded-lg p-3 flex items-center gap-3">
                           <CalendarPlus size={16} className="text-amber-400 shrink-0" />
                           <span className="text-sm text-amber-200">要設下次跟進日嗎？</span>
-                          <input
-                            type="date"
-                            value={promptFollowUpDate}
-                            onChange={(e) => setPromptFollowUpDate(e.target.value)}
-                            autoFocus
-                            className="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-amber-500"
+                          <DateTimePopover
+                            date={promptFollowUpDate}
+                            time={promptFollowUpTime}
+                            onChange={(d, t) => {
+                              setPromptFollowUpDate(d)
+                              setPromptFollowUpTime(t)
+                            }}
+                            align="left"
+                            defaultOpen
+                            title="下次跟進日期時間"
                           />
-                          <input
-                            type="time"
-                            value={promptFollowUpTime}
-                            onChange={(e) => setPromptFollowUpTime(e.target.value)}
-                            className="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm text-slate-400 focus:outline-none focus:border-amber-500 w-[80px]"
-                          />
+                          {promptFollowUpDate && (
+                            <span className="text-xs text-amber-200/80">
+                              {promptFollowUpDate}{promptFollowUpTime ? ` ${promptFollowUpTime}` : ''}
+                            </span>
+                          )}
                           <button
                             onClick={() => handleSetFollowUp(promptFollowUpDate, promptFollowUpTime)}
                             disabled={!promptFollowUpDate || submitting === 'followup'}
-                            className="px-3 py-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs rounded transition-colors"
+                            className="px-3 py-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs rounded transition-colors ml-auto"
                           >
                             設定
                           </button>
