@@ -1025,14 +1025,33 @@ export default function MarketingPage() {
 
                     {/* ① 重要大事 */}
                     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 shrink-0">
-                      <h3 className="text-sm font-semibold text-amber-400 mb-3 flex items-center gap-2">
-                        <Star size={14} />
-                        重要大事
-                      </h3>
+                      {/* 標題列 + 輸入欄同一行 */}
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-sm font-semibold text-amber-400 flex items-center gap-2 shrink-0">
+                          <Star size={14} />
+                          重要大事
+                        </h3>
+                        <input
+                          type="text"
+                          placeholder="新增重要大事..."
+                          value={newImportantText}
+                          onChange={(e) => setNewImportantText(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddImportant()}
+                          className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                        />
+                        <button
+                          onClick={handleAddImportant}
+                          disabled={submitting === 'important' || !newImportantText.trim()}
+                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm rounded transition-colors shrink-0"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                      {/* 列表 */}
                       {clientImportantItems.length === 0 ? (
-                        <p className="text-xs text-slate-500 mb-3">目前無重要事項</p>
+                        <p className="text-xs text-slate-500 mt-3">目前無重要事項</p>
                       ) : (
-                        <div className="space-y-2 mb-3">
+                        <div className="space-y-2 mt-3">
                           {clientImportantItems.map((item) => (
                             <div key={item.id} className="flex items-center justify-between text-sm">
                               <span className="text-slate-300">{item.title}</span>
@@ -1047,35 +1066,48 @@ export default function MarketingPage() {
                           ))}
                         </div>
                       )}
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="新增重要大事..."
-                          value={newImportantText}
-                          onChange={(e) => setNewImportantText(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddImportant()}
-                          className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                        />
-                        <button
-                          onClick={handleAddImportant}
-                          disabled={submitting === 'important' || !newImportantText.trim()}
-                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm rounded transition-colors"
-                        >
-                          <Plus size={14} />
-                        </button>
-                      </div>
                     </div>
 
                     {/* ② 待辦事項（A. 逾期視覺 + D. 今日 highlight） */}
                     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 shrink-0">
-                      <h3 className="text-sm font-semibold text-green-400 mb-3 flex items-center gap-2">
-                        <CheckSquare size={14} />
-                        待辦事項
-                      </h3>
+                      {/* 標題列 + 輸入欄同一行 */}
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-sm font-semibold text-green-400 flex items-center gap-2 shrink-0">
+                          <CheckSquare size={14} />
+                          待辦事項
+                        </h3>
+                        <input
+                          type="text"
+                          placeholder="新增待辦..."
+                          value={newTodoText}
+                          onChange={(e) => setNewTodoText(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddTodo()}
+                          className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                        />
+                        <input
+                          type="date"
+                          value={newTodoDate}
+                          onChange={(e) => setNewTodoDate(e.target.value)}
+                          className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1 text-xs text-slate-400 focus:outline-none focus:border-indigo-500 shrink-0 w-[130px]"
+                        />
+                        <button
+                          onClick={handleAddTodo}
+                          disabled={submitting === 'todo' || !newTodoText.trim()}
+                          className="px-2.5 py-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm rounded transition-colors shrink-0"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                      {newTodoDate && (
+                        <p className="text-xs text-slate-500 mt-1.5 ml-[100px]">
+                          📅 將同步建立 Google Calendar 事件
+                        </p>
+                      )}
+                      {/* 列表 */}
                       {clientTodos.length === 0 ? (
-                        <p className="text-xs text-slate-500 mb-3">目前無待辦事項</p>
+                        <p className="text-xs text-slate-500 mt-3">目前無待辦事項</p>
                       ) : (
-                        <div className="space-y-1.5 mb-3">
+                        <div className="space-y-1.5 mt-3">
                           {clientTodos.map((todo) => {
                             const style = getTodoStyle(todo.title)
                             return (
@@ -1098,35 +1130,6 @@ export default function MarketingPage() {
                             )
                           })}
                         </div>
-                      )}
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="新增待辦..."
-                          value={newTodoText}
-                          onChange={(e) => setNewTodoText(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddTodo()}
-                          className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                        />
-                        <input
-                          type="date"
-                          value={newTodoDate}
-                          onChange={(e) => setNewTodoDate(e.target.value)}
-                          className="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-400 focus:outline-none focus:border-indigo-500"
-                        />
-                        <button
-                          onClick={handleAddTodo}
-                          disabled={submitting === 'todo' || !newTodoText.trim()}
-                          className="px-3 py-1.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm rounded transition-colors flex items-center gap-1"
-                        >
-                          <Plus size={14} />
-                          {newTodoDate && <Calendar size={12} />}
-                        </button>
-                      </div>
-                      {newTodoDate && (
-                        <p className="text-xs text-slate-500 mt-1.5">
-                          📅 將同步建立 Google Calendar 事件
-                        </p>
                       )}
                     </div>
 
