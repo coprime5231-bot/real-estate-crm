@@ -7,6 +7,30 @@ function extractMultiSelect(prop: any): string[] {
   return prop.multi_select.map((o: any) => o.name).filter(Boolean)
 }
 
+// SLA 計算
+type SLAStatus = 'normal' | 'warning' | 'frozen'
+function getSLAStatus(grade: string | undefined, daysSinceEdit: number): SLAStatus {
+  const g = grade?.charAt(0)?.toUpperCase()
+  const th = g === 'A' ? { warn: 3, crit: 10 }
+           : g === 'C' ? { warn: 10, crit: 30 }
+           : { warn: 5, crit: 15 } // B 級或未分級都當 B
+
+  if (daysSinceEdit > th.crit) return 'frozen'
+  if (daysSinceEdit > th.warn) return 'warning'
+  return 'normal'
+}
+
+function getDaysSinceEdit(lastEditedTime: string | undefined, createdTime: string | undefined): number {
+  const ref = lastEditedTime || createdTime
+  if (!ref) return 0
+  const d = new Date(ref)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  d.setHours(0, 0, 0, 0)
+  const diff = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
+  return diff < 0 ? 0 : diff
+}
+
 // 從 Notion relation 屬性取出 id 陣列
 function extractRelation(prop: any): string[] {
   if (!prop?.relation) return []
@@ -35,6 +59,7 @@ export async function GET(request: NextRequest) {
 
         // 兼容「客戶等級」與舊名「等級」
         const gradeProp = p['客戶等級'] || p['等級']
+        const grade = (extractSelectValue(gradeProp?.select) || undefined) as BuyerData['grade']
 
         // 手機同時兼容 phone_number 與 rich_text
         const phoneRaw =
@@ -44,22 +69,31 @@ export async function GET(request: NextRequest) {
         // 區域為 multi_select，join 成字串顯示
         const areaArr = extractMultiSelect(p['區域'])
 
+        const nextFollowUp = p['日期']?.date?.start as string | undefined
+
+        // SLA 計算
+        const lastEditedTime = p['上次編輯時間']?.last_edited_time || (page as any).last_edited_time
+        const createdTime = (page as any).created_time
+        const daysSinceEdit = getDaysSinceEdit(lastEditedTime, createdTime)
+        const slaStatus = getSLAStatus(grade, daysSinceEdit)
+
         return {
           id: page.id,
           name: p['名稱']?.title?.[0]?.plain_text || '未命名',
           phone: phoneRaw || undefined,
           note: extractText(p['NOTE']?.rich_text || []),
           progress: extractText(p['最近進展']?.rich_text || []),
-          grade: (extractSelectValue(gradeProp?.select) || undefined) as BuyerData['grade'],
+          grade,
           budget: extractSelectValue(p['預算']?.select) || undefined,
           needs: extractText(p['需求']?.rich_text || []),
           area: areaArr.length ? areaArr.join('、') : undefined,
-          // 「下次跟進」= Notion「日期」欄位
-          nextFollowUp: p['日期']?.date?.start,
-          // 需求標籤（multi_select）→ 篩選按鈕用
+          nextFollowUp,
           needTags: extractMultiSelect(p['需求標籤']),
-          // 待辦事項 relation → 顯示關聯 id（後續抓標題用）
           todoIds: extractRelation(p['待辦事項']),
+          // SLA 欄位
+          slaStatus,
+          daysSinceEdit,
+          hasNextStep: !!nextFollowUp,
         }
       })
 

@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Client, Grade, ImportantItem, TodoItem, Block } from '@/lib/types'
+import { Client, Grade, SLAStatus, ImportantItem, TodoItem, Block } from '@/lib/types'
 import { daysUntil, isOverdue, formatDate } from '@/lib/notion'
 import VideosPage from '@/app/videos/page'
 import AIPage from '@/app/ai/page'
@@ -59,6 +59,16 @@ function composeDatetime(date: string, time: string): string {
   if (!date) return ''
   if (!time) return date // 純日期 2026-04-17
   return `${date}T${time}:00+08:00` // ISO with timezone
+}
+
+// SLA 狀態 emoji
+function getSLAEmoji(grade?: string, slaStatus?: SLAStatus): string {
+  if (slaStatus === 'frozen') return '🧊'
+  const g = grade?.charAt(0)?.toUpperCase()
+  if (g === 'A') return '🔥'
+  if (g === 'B') return '🌤'
+  if (g === 'C') return '❄️'
+  return '⚪' // 未分級
 }
 
 // 顯示日期（有時間 → 4/17 10:30；無時間 → 4/17）
@@ -928,7 +938,15 @@ export default function MarketingPage() {
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-white text-sm">{client.name}</span>
+                          <span className="font-medium text-white text-sm flex items-center gap-1.5">
+                            <span className="relative shrink-0">
+                              {getSLAEmoji(client.grade, client.slaStatus)}
+                              {client.slaStatus === 'warning' && (
+                                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-yellow-400 rounded-full" />
+                              )}
+                            </span>
+                            {client.name}
+                          </span>
                           <div className="flex items-center gap-1.5">
                             {/* A. 逾期 badge */}
                             {overdue && (
@@ -983,7 +1001,15 @@ export default function MarketingPage() {
                     {/* 客戶標頭 + B. 快速跟進按鈕 */}
                     <div className="flex items-center justify-between">
                       <div>
-                        <h2 className="text-xl font-bold text-white">{selectedClient.name}</h2>
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                          <span className="relative">
+                            {getSLAEmoji(selectedClient.grade, selectedClient.slaStatus)}
+                            {selectedClient.slaStatus === 'warning' && (
+                              <span className="absolute -top-0.5 -right-1 w-2.5 h-2.5 bg-yellow-400 rounded-full" />
+                            )}
+                          </span>
+                          {selectedClient.name}
+                        </h2>
                         <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
                           {selectedClient.phone && <span>📱 {selectedClient.phone}</span>}
                           {/* A. 跟進逾期提示 */}

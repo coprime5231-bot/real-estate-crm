@@ -1,5 +1,7 @@
 export type Grade = 'A級' | 'B級' | 'C級'
 
+export type SLAStatus = 'normal' | 'warning' | 'frozen'
+
 export interface Client {
   id: string
   name: string
@@ -14,6 +16,9 @@ export interface Client {
   nextFollowUp?: string
   needTags?: string[]
   todoIds?: string[]
+  slaStatus?: SLAStatus
+  daysSinceEdit?: number
+  hasNextStep?: boolean
 }
 
 export interface Property {
