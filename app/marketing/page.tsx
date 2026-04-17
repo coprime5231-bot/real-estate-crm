@@ -115,6 +115,9 @@ export default function MarketingPage() {
   const [newProgressText, setNewProgressText] = useState('')
   const [submitting, setSubmitting] = useState<string | null>(null)
 
+  // === C. 今日聚焦篩選 ===
+  const [focusFilter, setFocusFilter] = useState<'overdue' | 'today' | 'frozen' | 'noStep' | null>(null)
+
   // === A1. 頂部收合 ===
   const [importantCollapsed, setImportantCollapsed] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('crm.topBar.importantCollapsed') === 'true'
@@ -245,6 +248,17 @@ export default function MarketingPage() {
 
     filtered = filtered.filter((c) => gradeMatches(c.grade, selectedGrade))
 
+    // C. 今日聚焦篩選（與等級篩選疊加）
+    if (focusFilter === 'overdue') {
+      filtered = filtered.filter((c) => isOverdue(c.nextFollowUp))
+    } else if (focusFilter === 'today') {
+      filtered = filtered.filter((c) => c.nextFollowUp && daysUntil(c.nextFollowUp) === 0)
+    } else if (focusFilter === 'frozen') {
+      filtered = filtered.filter((c) => c.slaStatus === 'frozen')
+    } else if (focusFilter === 'noStep') {
+      filtered = filtered.filter((c) => !c.nextFollowUp)
+    }
+
     filtered.sort((a, b) => {
       const aOverdue = isOverdue(a.nextFollowUp)
       const bOverdue = isOverdue(b.nextFollowUp)
@@ -254,7 +268,7 @@ export default function MarketingPage() {
     })
 
     return filtered
-  }, [clients, searchTerm, selectedGrade])
+  }, [clients, searchTerm, selectedGrade, focusFilter])
 
   const selectedClient = useMemo(
     () => clients.find((c) => c.id === selectedClientId) || null,
@@ -388,6 +402,18 @@ export default function MarketingPage() {
     () => todoItems.filter((t) => { const d = parseTodoDate(t.title); return d && isToday(d) }).length,
     [todoItems]
   )
+
+  // C. 今日聚焦 badge 數字
+  const focusCounts = useMemo(() => {
+    const overdue = clients.filter((c) => isOverdue(c.nextFollowUp)).length
+    const today = clients.filter((c) => {
+      if (!c.nextFollowUp) return false
+      return daysUntil(c.nextFollowUp) === 0
+    }).length
+    const frozen = clients.filter((c) => c.slaStatus === 'frozen').length
+    const noStep = clients.filter((c) => !c.nextFollowUp).length
+    return { overdue, today, frozen, noStep }
+  }, [clients])
 
   // ===================== 操作 =====================
 
@@ -840,6 +866,44 @@ export default function MarketingPage() {
         </div>
       </div>
 
+      {/* ===== C. 今日聚焦橫幅 ===== */}
+      <div className="border-b border-slate-700 bg-slate-800/20">
+        <div className="max-w-7xl mx-auto px-6 py-2.5">
+          {focusCounts.overdue === 0 && focusCounts.today === 0 && focusCounts.frozen === 0 && focusCounts.noStep === 0 ? (
+            <p className="text-sm text-slate-500 text-center">今天沒有待處理事項</p>
+          ) : (
+            <div className="flex items-center gap-4 text-sm">
+              {([
+                { key: 'overdue' as const, emoji: '🔴', label: '逾期跟進', count: focusCounts.overdue },
+                { key: 'today' as const, emoji: '🟠', label: '今日到期', count: focusCounts.today },
+                { key: 'frozen' as const, emoji: '🧊', label: '失聯警示', count: focusCounts.frozen },
+                { key: 'noStep' as const, emoji: '⚠️', label: '沒下一步', count: focusCounts.noStep },
+              ]).map(({ key, emoji, label, count }, i) => (
+                <span key={key} className="flex items-center gap-1">
+                  {i > 0 && <span className="text-slate-600 mr-3">|</span>}
+                  <button
+                    onClick={() => count > 0 && setFocusFilter(focusFilter === key ? null : key)}
+                    disabled={count === 0}
+                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-colors ${
+                      focusFilter === key
+                        ? 'bg-indigo-600/30 text-indigo-300'
+                        : count > 0
+                        ? 'hover:bg-slate-700/50 text-slate-300 cursor-pointer'
+                        : 'text-slate-600 cursor-default'
+                    }`}
+                  >
+                    <span>{emoji}</span>
+                    <span>{label}</span>
+                    <span className="font-bold">{count}</span>
+                    <span>人</span>
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ===== 四大分區 Tab ===== */}
       <div className="border-b border-slate-700 bg-slate-800/30">
         <div className="max-w-7xl mx-auto px-6">
@@ -872,6 +936,21 @@ export default function MarketingPage() {
         {/* --- 行銷 Tab --- */}
         {activeTab === 'marketing' && (
           <div>
+            {/* C. 篩選狀態條 */}
+            {focusFilter && (
+              <div className="px-6 py-2 border-b border-indigo-700/30 bg-indigo-900/10 flex items-center gap-2 text-sm">
+                <span className="text-indigo-300">
+                  篩選中：{focusFilter === 'overdue' ? '逾期跟進' : focusFilter === 'today' ? '今日到期' : focusFilter === 'frozen' ? '失聯警示' : '沒下一步'}
+                </span>
+                <button
+                  onClick={() => setFocusFilter(null)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             {/* 等級篩選 + 搜尋 */}
             <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-4">
               <div className="flex gap-2">
