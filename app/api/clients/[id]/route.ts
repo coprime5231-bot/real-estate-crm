@@ -17,9 +17,11 @@ export async function PATCH(
       }
     }
 
+    // 手機 Notion 欄位型別為 phone_number；空字串寫 null 清空
     if (body.phone !== undefined) {
+      const v = typeof body.phone === 'string' ? body.phone.trim() : ''
       updateProperties['手機'] = {
-        rich_text: [{ text: { content: body.phone } }],
+        phone_number: v || null,
       }
     }
 
@@ -71,10 +73,33 @@ export async function PATCH(
       }
     }
 
+    // 需求標籤（multi_select）— 前端用「、」或「,」分隔字串
+    if (body.needTags !== undefined) {
+      const names =
+        typeof body.needTags === 'string'
+          ? body.needTags
+              .split(/[、,，]/)
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : Array.isArray(body.needTags)
+          ? body.needTags
+          : []
+      updateProperties['需求標籤'] = {
+        multi_select: names.map((name: string) => ({ name })),
+      }
+    }
+
     // 下次跟進 → 寫回 Notion「日期」欄位
     if (body.nextFollowUp !== undefined) {
       updateProperties['日期'] = body.nextFollowUp
         ? { date: { start: body.nextFollowUp } }
+        : { date: null }
+    }
+
+    // 生日 → 寫回 Notion「生日」date 欄位
+    if (body.birthday !== undefined) {
+      updateProperties['生日'] = body.birthday
+        ? { date: { start: body.birthday } }
         : { date: null }
     }
 

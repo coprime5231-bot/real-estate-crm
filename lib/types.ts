@@ -93,3 +93,21 @@ export interface Community {
   name: string
   leju_url: string | null
 }
+
+export type ViewingOpinion = 'liked' | 'disliked' | null
+
+export interface Viewing {
+  id: number
+  calendar_event_id: string
+  notion_buyer_id: string
+  datetime: string
+  location: string
+  community_name: string | null
+  community_url: string | null
+  community_leju_url: string | null
+  colleague_name: string
+  colleague_phone: string
+  note: string | null
+  opinion: ViewingOpinion
+  created_at: string
+}

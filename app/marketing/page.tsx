@@ -29,6 +29,8 @@ import VideosPage from '@/app/videos/page'
 import AIPage from '@/app/ai/page'
 import DateTimePopover, { formatTodayISO, computeDefaultTime } from '@/components/DateTimePopover'
 import CommunityAutocomplete from '@/components/CommunityAutocomplete'
+import ClientBasicInfoTab from '@/components/ClientBasicInfoTab'
+import ClientViewingsTab from '@/components/ClientViewingsTab'
 
 type Tab = 'marketing' | 'entrust' | 'videos' | 'ai'
 
@@ -135,6 +137,10 @@ export default function MarketingPage() {
 
   // === 頂部計數條篩選（第三輪：🎂 今日生日） ===
   const [focusFilter, setFocusFilter] = useState<'birthday' | null>(null)
+
+  // === 客戶詳情 3 Tab ===
+  type DetailTab = 'latest' | 'basic' | 'viewings'
+  const [detailTab, setDetailTab] = useState<DetailTab>('latest')
 
   // === U5. 新增客戶 modal ===
   const [showNewClientModal, setShowNewClientModal] = useState(false)
@@ -475,7 +481,15 @@ export default function MarketingPage() {
     // A2: 選新客戶時重新啟用綁定
     setQuickImportantBound(true)
     setQuickTodoBound(true)
+    // Tab 切換：選新客戶時回到 Tab 1
+    setDetailTab('latest')
   }
+
+  // Tab 2 基本資料欄位編輯後，更新左側列表的 client cache
+  const handleBasicInfoUpdate = useCallback((patch: Partial<Client>) => {
+    if (!selectedClientId) return
+    setClients((prev) => prev.map((c) => (c.id === selectedClientId ? { ...c, ...patch } : c)))
+  }, [selectedClientId])
 
   const handleJumpToClient = (clientId: string, source: string) => {
     if (!clientId) return
@@ -1361,6 +1375,46 @@ export default function MarketingPage() {
                       </div>
                     </div>
 
+                    {/* Tab 切換列 */}
+                    <div className="flex gap-1 border-b border-slate-700">
+                      {([
+                        { key: 'latest', label: '最新進度' },
+                        { key: 'basic', label: '基本資料' },
+                        { key: 'viewings', label: '帶看記錄卡' },
+                      ] as const).map(({ key, label }) => (
+                        <button
+                          key={key}
+                          onClick={() => setDetailTab(key)}
+                          className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
+                            detailTab === key
+                              ? 'border-indigo-500 text-indigo-400'
+                              : 'border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-600'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* === Tab 2：基本資料 === */}
+                    {detailTab === 'basic' && (
+                      <ClientBasicInfoTab
+                        client={selectedClient}
+                        onUpdate={handleBasicInfoUpdate}
+                      />
+                    )}
+
+                    {/* === Tab 3：帶看記錄卡 === */}
+                    {detailTab === 'viewings' && (
+                      <ClientViewingsTab
+                        clientId={selectedClient.id}
+                        onOpenAddModal={openViewingModal}
+                      />
+                    )}
+
+                    {/* === Tab 1：最新進度（原有全部內容） === */}
+                    {detailTab === 'latest' && (
+                    <div className="space-y-4">
                     {/* ① 重要大事 */}
                     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                       {/* 標題列 + 輸入欄同一行 */}
@@ -1587,6 +1641,8 @@ export default function MarketingPage() {
                         </div>
                       )}
                     </div>
+                    </div>
+                    )}
                   </div>
                 )}
               </div>
