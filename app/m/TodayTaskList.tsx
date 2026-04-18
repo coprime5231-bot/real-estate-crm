@@ -127,6 +127,8 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
           eventId: task.eventId,
           action,
           description: task.description,
+          eventStartIso: task.start,
+          communityName: task.viewingExtras?.communityName ?? null,
         }),
       })
       const data = await res.json()

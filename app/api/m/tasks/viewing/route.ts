@@ -19,16 +19,19 @@ const ACTION_MAP: Record<ViewingAction, keyof typeof VIEWING_SCORE> = {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
-    const { eventId, action, description } = body as {
+    const { eventId, action, description, eventStartIso, communityName } = body as {
       eventId?: string
       action?: string
       description?: string | null
+      eventStartIso?: string | null
+      communityName?: string | null
     }
 
     if (
       !eventId ||
       !action ||
-      !VALID_ACTIONS.includes(action as ViewingAction)
+      !VALID_ACTIONS.includes(action as ViewingAction) ||
+      !eventStartIso
     ) {
       return NextResponse.json({ error: 'invalid params' }, { status: 400 })
     }
@@ -56,16 +59,15 @@ export async function POST(req: NextRequest) {
       ['viewing', act, eventId, spec.baseScore, totalScore, spec.cardColor, quarter, starsAwarded],
     )
 
-    let buyerOk: boolean | null = null
-    if (act === 'yes') {
-      const wb = await handleViewingBuyerWriteback(
-        description ?? null,
-      ).catch((err) => {
-        console.error('[viewing] buyer writeback failed', err)
-        return null
-      })
-      buyerOk = wb?.success ?? null
-    }
+    const wb = await handleViewingBuyerWriteback(description ?? null, {
+      interest: act,
+      communityName: communityName ?? null,
+      eventStartIso,
+    }).catch((err) => {
+      console.error('[viewing] buyer writeback failed', err)
+      return null
+    })
+    const buyerOk: boolean | null = wb?.success ?? null
 
     await updateEventColor(eventId, '8').catch((err) => {
       console.error('[viewing] calendar color update failed', err)
