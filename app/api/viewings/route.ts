@@ -11,7 +11,9 @@ import { pool } from '@/lib/mba/db'
  *   buyerName        買方名稱（用於組 event summary，可從前端傳）
  *   datetime         ISO 字串，帶 tz offset，例 "2026-04-20T14:00:00+08:00"
  *   location         地點（必填）
- *   communityUrl     社區資料連結（optional）
+ *   communityName    社區名稱（optional）
+ *   communityUrl     永慶案件連結（optional）
+ *   communityLejuUrl 樂居連結（optional）
  *   colleagueName    同事名
  *   colleaguePhone   同事電話
  *   note             備註（optional）
@@ -24,7 +26,9 @@ export async function POST(request: NextRequest) {
       buyerName,
       datetime,
       location,
+      communityName,
       communityUrl,
+      communityLejuUrl,
       colleagueName,
       colleaguePhone,
       note,
@@ -72,15 +76,18 @@ export async function POST(request: NextRequest) {
       const insertRes = await pool.query(
         `INSERT INTO viewings (
           calendar_event_id, notion_buyer_id, datetime, location,
-          community_url, colleague_name, colleague_phone, note
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          community_name, community_url, community_leju_url,
+          colleague_name, colleague_phone, note
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING id, created_at`,
         [
           calendarEventId,
           buyerId,
           datetime,
           location.trim(),
+          communityName?.trim() || null,
           communityUrl?.trim() || null,
+          communityLejuUrl?.trim() || null,
           colleagueName.trim(),
           colleaguePhone.trim(),
           note?.trim() || null,

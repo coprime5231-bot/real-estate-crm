@@ -130,7 +130,9 @@ export default function MarketingPage() {
   const [viewingDate, setViewingDate] = useState('')
   const [viewingTime, setViewingTime] = useState('')
   const [viewingLocation, setViewingLocation] = useState('')
+  const [viewingCommunityName, setViewingCommunityName] = useState('')
   const [viewingCommunityUrl, setViewingCommunityUrl] = useState('')
+  const [viewingCommunityLejuUrl, setViewingCommunityLejuUrl] = useState('')
   const [viewingColleagueName, setViewingColleagueName] = useState('')
   const [viewingColleaguePhone, setViewingColleaguePhone] = useState('')
   const [viewingNote, setViewingNote] = useState('')
@@ -677,7 +679,9 @@ export default function MarketingPage() {
     setViewingDate(formatTodayISO())
     setViewingTime(computeDefaultTime())
     setViewingLocation('')
+    setViewingCommunityName('')
     setViewingCommunityUrl('')
+    setViewingCommunityLejuUrl('')
     setViewingColleagueName('')
     setViewingColleaguePhone('')
     setViewingNote('')
@@ -702,7 +706,9 @@ export default function MarketingPage() {
           buyerName: selectedClient.name,
           datetime,
           location: viewingLocation.trim(),
+          communityName: viewingCommunityName.trim() || undefined,
           communityUrl: viewingCommunityUrl.trim() || undefined,
+          communityLejuUrl: viewingCommunityLejuUrl.trim() || undefined,
           colleagueName: viewingColleagueName.trim(),
           colleaguePhone: viewingColleaguePhone.trim(),
           note: viewingNote.trim() || undefined,
@@ -1707,10 +1713,24 @@ export default function MarketingPage() {
                 />
               </div>
 
-              {/* 4. 社區資料連結 */}
+              {/* 4. 社區名稱 */}
               <div>
                 <label className="block text-sm text-slate-400 mb-1.5">
-                  社區資料連結 <span className="text-slate-500 text-xs">(選填)</span>
+                  社區名稱 <span className="text-slate-500 text-xs">(選填)</span>
+                </label>
+                <input
+                  type="text"
+                  value={viewingCommunityName}
+                  onChange={(e) => setViewingCommunityName(e.target.value)}
+                  placeholder="例如：太普"
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* 5. 永慶連結 */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-1.5">
+                  永慶連結 <span className="text-slate-500 text-xs">(選填)</span>
                 </label>
                 <input
                   type="url"
@@ -1721,7 +1741,21 @@ export default function MarketingPage() {
                 />
               </div>
 
-              {/* 5 + 6. 同事 */}
+              {/* 6. 樂居連結 */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-1.5">
+                  樂居連結 <span className="text-slate-500 text-xs">(選填)</span>
+                </label>
+                <input
+                  type="url"
+                  value={viewingCommunityLejuUrl}
+                  onChange={(e) => setViewingCommunityLejuUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* 7 + 8. 同事 */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-sm text-slate-400 mb-1.5">同事名</label>
@@ -1745,7 +1779,7 @@ export default function MarketingPage() {
                 </div>
               </div>
 
-              {/* 7. 備註 */}
+              {/* 9. 備註 */}
               <div>
                 <label className="block text-sm text-slate-400 mb-1.5">
                   備註 <span className="text-slate-500 text-xs">(選填)</span>
