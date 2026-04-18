@@ -2,9 +2,9 @@
  * 帶看意願 → 回寫買方 Notion page body
  *
  * 從 Calendar event description 抓買方 page UUID，append 一段
- * 「M/D HH:MM 〈社區名〉 覺得不錯 有喜歡」
- * 「M/D HH:MM 〈社區名〉 沒興趣」
- * 到該 page。社區名為空時跳過。
+ * 「M/D HH:MM "〈社區名〉" 有興趣」
+ * 「M/D HH:MM "〈社區名〉" 沒興趣」
+ * 到該 page。社區名為空時整段省略（不寫空引號、不退回地址）。
  */
 
 import { extractPageId } from './notion-writeback'
@@ -50,9 +50,11 @@ export async function handleViewingBuyerWriteback(
   }
 
   const dt = formatTaipeiMdHm(opts.eventStartIso)
-  const community = opts.communityName?.trim() ? ` ${opts.communityName.trim()}` : ''
-  const tail = opts.interest === 'yes' ? '覺得不錯 有喜歡' : '沒興趣'
-  const text = `${dt}${community} ${tail}`
+  const trimmedCommunity = opts.communityName?.trim() || ''
+  const tail = opts.interest === 'yes' ? '有興趣' : '沒興趣'
+  const text = trimmedCommunity
+    ? `${dt} "${trimmedCommunity}" ${tail}`
+    : `${dt} ${tail}`
 
   try {
     const res = await fetch(`${NOTION_API}/blocks/${pageId}/children`, {

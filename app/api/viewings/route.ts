@@ -44,7 +44,11 @@ export async function POST(request: NextRequest) {
 
     // 建 Google Calendar 事件
     const buyerNotionUrl = `https://www.notion.so/${String(buyerId).replace(/-/g, '')}`
-    const summary = `帶看 ${buyerName || '客戶'}${communityName?.trim() ? ` ${communityName.trim()}` : ''}`.trim()
+    // 標題只含買方與社區名；地址走 location 欄位（📍），不進標題。
+    const trimmedCommunity = communityName?.trim() || ''
+    const summary = trimmedCommunity
+      ? `帶看 ${buyerName || '客戶'} ${trimmedCommunity}`
+      : `帶看 ${buyerName || '客戶'}`
     const descLines = [
       `買方：${buyerName || ''}`.trim(),
       `買方 Notion：${buyerNotionUrl}`,
