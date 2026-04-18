@@ -102,6 +102,9 @@ export async function GET(request: NextRequest) {
 
         const nextFollowUp = p['日期']?.date?.start as string | undefined
 
+        // 生日（Notion date 型別，只關心 .start；比對月-日時忽略年份）
+        const birthday = (p['生日']?.date?.start as string | undefined) ?? null
+
         // SLA 計算
         const lastEditedTime = p['上次編輯時間']?.last_edited_time || (page as any).last_edited_time
         const createdTime = (page as any).created_time
@@ -119,6 +122,7 @@ export async function GET(request: NextRequest) {
           needs: extractText(p['需求']?.rich_text || []),
           area: areaArr.length ? areaArr.join('、') : undefined,
           nextFollowUp,
+          birthday,
           needTags: extractMultiSelect(p['需求標籤']),
           todoIds: extractRelation(p['待辦事項']),
           // SLA 欄位

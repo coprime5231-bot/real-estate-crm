@@ -14,6 +14,7 @@ export interface Client {
   needs?: string
   area?: string
   nextFollowUp?: string
+  birthday?: string | null
   needTags?: string[]
   todoIds?: string[]
   slaStatus?: SLAStatus

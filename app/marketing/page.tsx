@@ -56,6 +56,21 @@ function daysDiff(d: Date): number {
   return Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 }
 
+// 生日判斷：只比 MM-DD，忽略年份；空字串 / null 都回 false
+function isTodayBirthday(birthday?: string | null): boolean {
+  if (!birthday) return false
+  const d = new Date(birthday)
+  if (isNaN(d.getTime())) return false
+  const now = new Date()
+  return d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+}
+
+// 是否為 A/B/C 級
+function isABCGrade(grade?: string): boolean {
+  const g = grade?.charAt(0)?.toUpperCase()
+  return g === 'A' || g === 'B' || g === 'C'
+}
+
 // 組合日期+時間 → Notion 格式
 function composeDatetime(date: string, time: string): string {
   if (!date) return ''
@@ -117,8 +132,8 @@ export default function MarketingPage() {
   const [newProgressText, setNewProgressText] = useState('')
   const [submitting, setSubmitting] = useState<string | null>(null)
 
-  // === Q1. 逾期篩選（點頂部「逾期」計數切換） ===
-  const [focusFilter, setFocusFilter] = useState<'overdue' | null>(null)
+  // === 頂部計數條篩選（第三輪：🎂 今日生日） ===
+  const [focusFilter, setFocusFilter] = useState<'birthday' | null>(null)
 
   // === U5. 新增客戶 modal ===
   const [showNewClientModal, setShowNewClientModal] = useState(false)
@@ -271,11 +286,11 @@ export default function MarketingPage() {
       )
     }
 
-    filtered = filtered.filter((c) => gradeMatches(c.grade, selectedGrade))
-
-    // Q1. 逾期篩選（點頂部「逾期」計數切換）
-    if (focusFilter === 'overdue') {
-      filtered = filtered.filter((c) => isOverdue(c.nextFollowUp))
+    // 🎂 今日生日篩選與 A/B/C 級互斥：開啟時只顯示 A/B/C 級 + 今日生日
+    if (focusFilter === 'birthday') {
+      filtered = filtered.filter((c) => isABCGrade(c.grade) && isTodayBirthday(c.birthday))
+    } else {
+      filtered = filtered.filter((c) => gradeMatches(c.grade, selectedGrade))
     }
 
     filtered.sort((a, b) => {
@@ -438,21 +453,11 @@ export default function MarketingPage() {
     }, 800)
   }, [fetchDashboard])
 
-  // ===================== 統計（含逾期計算） =====================
+  // ===================== 統計（🎂 今日生日） =====================
 
-  const overdueClientCount = useMemo(
-    () => clients.filter((c) => isOverdue(c.nextFollowUp)).length,
+  const todayBirthdayCount = useMemo(
+    () => clients.filter((c) => isABCGrade(c.grade) && isTodayBirthday(c.birthday)).length,
     [clients]
-  )
-
-  const overdueTodoCount = useMemo(
-    () => todoItems.filter((t) => { const d = parseTodoDate(t.title); return d && isPast(d) && !isToday(d) }).length,
-    [todoItems]
-  )
-
-  const todayTodoCount = useMemo(
-    () => todoItems.filter((t) => { const d = parseTodoDate(t.title); return d && isToday(d) }).length,
-    [todoItems]
   )
 
   // ===================== 操作 =====================
@@ -833,45 +838,24 @@ export default function MarketingPage() {
     <div className="min-h-screen bg-slate-900">
       {/* ===== 頂部儀表板 ===== */}
       <div className="border-b border-slate-700 bg-slate-900/80 backdrop-blur">
-        {/* 統計 badge（含逾期數） */}
+        {/* 頂部計數條：🎂 今日生日（點擊篩選 A/B/C 級今日壽星） */}
         <div className="max-w-7xl mx-auto px-6 pt-5 pb-3">
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-slate-400">
-              今日待辦 <span className="text-white font-bold">{todoItems.length}</span> 件
-            </span>
-            {todayTodoCount > 0 && (
-              <>
-                <span className="text-slate-600">|</span>
-                <span className="text-amber-400">
-                  今日到期 <span className="font-bold">{todayTodoCount}</span> 件
-                </span>
-              </>
-            )}
-            {(overdueTodoCount > 0 || overdueClientCount > 0) && (
-              <>
-                <span className="text-slate-600">|</span>
-                <button
-                  onClick={() => {
-                    setFocusFilter(focusFilter === 'overdue' ? null : 'overdue')
-                    setActiveTab('marketing')
-                  }}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors ${
-                    focusFilter === 'overdue'
-                      ? 'bg-red-600/30 text-red-200 ring-1 ring-red-500/60'
-                      : 'text-red-400 hover:bg-red-900/30'
-                  }`}
-                  title={focusFilter === 'overdue' ? '清除篩選' : '篩選逾期客戶'}
-                >
-                  <span>逾期</span>
-                  <span className="font-bold">{overdueTodoCount + overdueClientCount}</span>
-                  <span>件</span>
-                </button>
-              </>
-            )}
-            <span className="text-slate-600">|</span>
-            <span className="text-slate-400">
-              重要事項 <span className="text-white font-bold">{importantItems.length}</span> 件
-            </span>
+            <button
+              onClick={() => {
+                setFocusFilter(focusFilter === 'birthday' ? null : 'birthday')
+                setActiveTab('marketing')
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded transition-colors ${
+                focusFilter === 'birthday'
+                  ? 'bg-pink-600/30 text-pink-200 ring-1 ring-pink-500/60'
+                  : 'text-pink-400 hover:bg-pink-900/30'
+              }`}
+              title={focusFilter === 'birthday' ? '清除篩選' : '篩選今日生日（A/B/C 級）'}
+            >
+              <span>🎂 今日生日</span>
+              <span className="font-bold">({todayBirthdayCount})</span>
+            </button>
           </div>
         </div>
 
@@ -1109,10 +1093,10 @@ export default function MarketingPage() {
         {/* --- 行銷 Tab --- */}
         {activeTab === 'marketing' && (
           <div>
-            {/* Q1. 篩選狀態條 */}
-            {focusFilter === 'overdue' && (
-              <div className="px-6 py-2 border-b border-red-700/30 bg-red-900/10 flex items-center gap-2 text-sm">
-                <span className="text-red-300">篩選中：逾期跟進</span>
+            {/* 篩選狀態條：🎂 今日生日 */}
+            {focusFilter === 'birthday' && (
+              <div className="px-6 py-2 border-b border-pink-700/30 bg-pink-900/10 flex items-center gap-2 text-sm">
+                <span className="text-pink-300">🎂 篩選中：今日生日（A/B/C 級）</span>
                 <button
                   onClick={() => setFocusFilter(null)}
                   className="text-slate-400 hover:text-white transition-colors"
@@ -1129,7 +1113,7 @@ export default function MarketingPage() {
                 {(['A級', 'B級', 'C級', 'all'] as const).map((grade) => (
                   <button
                     key={grade}
-                    onClick={() => setSelectedGrade(grade)}
+                    onClick={() => { setSelectedGrade(grade); setFocusFilter(null) }}
                     className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
                       selectedGrade === grade
                         ? 'bg-indigo-600 text-white'
@@ -1248,7 +1232,7 @@ export default function MarketingPage() {
                     載入中...
                   </div>
                 ) : (
-                  <div className="p-6 space-y-4">
+                  <div className="p-6 pb-[200px] space-y-4">
                     {/* 客戶標頭 + B. 快速跟進按鈕 */}
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
@@ -1634,36 +1618,22 @@ export default function MarketingPage() {
           onClick={() => !creatingViewing && setShowViewingModal(false)}
         >
           <div
-            className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto"
+            className="relative bg-slate-800 border border-slate-600 rounded-lg shadow-2xl w-full max-w-lg mx-4 p-5 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <Eye size={18} className="text-sky-400" />
-                新增帶看
-              </h3>
-              <button
-                onClick={() => !creatingViewing && setShowViewingModal(false)}
-                className="text-slate-500 hover:text-white transition-colors"
-                disabled={creatingViewing}
-              >
-                <X size={18} />
-              </button>
-            </div>
+            <button
+              onClick={() => !creatingViewing && setShowViewingModal(false)}
+              className="absolute top-3 right-3 text-slate-500 hover:text-white transition-colors"
+              disabled={creatingViewing}
+              aria-label="關閉"
+            >
+              <X size={18} />
+            </button>
 
-            <div className="space-y-3">
-              {/* 1. 帶看客戶 */}
+            <div className="space-y-2.5">
+              {/* 1. 日期時間 */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1.5">帶看客戶</label>
-                <div className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-300">
-                  {selectedClient.name}
-                  <span className="text-xs text-slate-500 ml-2">（目前客戶）</span>
-                </div>
-              </div>
-
-              {/* 2. 日期時間 */}
-              <div>
-                <label className="block text-sm text-slate-400 mb-1.5">日期時間 <span className="text-slate-500 text-xs">(30 分鐘事件)</span></label>
+                <label className="block text-sm text-slate-400 mb-1">日期時間 <span className="text-slate-500 text-xs">(30 分鐘事件)</span></label>
                 <div className="flex items-center gap-2">
                   <input
                     type="date"
@@ -1703,19 +1673,19 @@ export default function MarketingPage() {
 
               {/* 3. 地點 */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1.5">地點</label>
+                <label className="block text-sm text-slate-400 mb-1">地點</label>
                 <input
                   type="text"
                   value={viewingLocation}
                   onChange={(e) => setViewingLocation(e.target.value)}
                   placeholder="例如：信義區松仁路 10 號"
-                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               {/* 4. 社區名稱 */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1.5">
+                <label className="block text-sm text-slate-400 mb-1">
                   社區名稱 <span className="text-slate-500 text-xs">(選填)</span>
                 </label>
                 <input
@@ -1723,13 +1693,13 @@ export default function MarketingPage() {
                   value={viewingCommunityName}
                   onChange={(e) => setViewingCommunityName(e.target.value)}
                   placeholder="例如：太普"
-                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               {/* 5. 永慶連結 */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1.5">
+                <label className="block text-sm text-slate-400 mb-1">
                   永慶連結 <span className="text-slate-500 text-xs">(選填)</span>
                 </label>
                 <input
@@ -1737,13 +1707,13 @@ export default function MarketingPage() {
                   value={viewingCommunityUrl}
                   onChange={(e) => setViewingCommunityUrl(e.target.value)}
                   placeholder="https://..."
-                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               {/* 6. 樂居連結 */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1.5">
+                <label className="block text-sm text-slate-400 mb-1">
                   樂居連結 <span className="text-slate-500 text-xs">(選填)</span>
                 </label>
                 <input
@@ -1751,37 +1721,37 @@ export default function MarketingPage() {
                   value={viewingCommunityLejuUrl}
                   onChange={(e) => setViewingCommunityLejuUrl(e.target.value)}
                   placeholder="https://..."
-                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               {/* 7 + 8. 同事 */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1.5">同事名</label>
+                  <label className="block text-sm text-slate-400 mb-1">同事名</label>
                   <input
                     type="text"
                     value={viewingColleagueName}
                     onChange={(e) => setViewingColleagueName(e.target.value)}
                     placeholder="例如：張大明"
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1.5">同事電話</label>
+                  <label className="block text-sm text-slate-400 mb-1">同事電話</label>
                   <input
                     type="tel"
                     value={viewingColleaguePhone}
                     onChange={(e) => setViewingColleaguePhone(e.target.value)}
                     placeholder="0912-345-678"
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
 
               {/* 9. 備註 */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1.5">
+                <label className="block text-sm text-slate-400 mb-1">
                   備註 <span className="text-slate-500 text-xs">(選填)</span>
                 </label>
                 <textarea
@@ -1789,23 +1759,23 @@ export default function MarketingPage() {
                   onChange={(e) => setViewingNote(e.target.value)}
                   rows={2}
                   placeholder="其他需要記錄的事項..."
-                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
                 />
               </div>
             </div>
 
-            <div className="flex gap-2 justify-end mt-5">
+            <div className="flex gap-2 justify-end mt-4">
               <button
                 onClick={() => setShowViewingModal(false)}
                 disabled={creatingViewing}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-300 text-sm rounded transition-colors"
+                className="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-300 text-sm rounded transition-colors"
               >
                 取消
               </button>
               <button
                 onClick={handleCreateViewing}
                 disabled={creatingViewing}
-                className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-sm rounded transition-colors"
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-sm rounded transition-colors"
               >
                 <Eye size={14} />
                 {creatingViewing ? '建立中...' : '建立帶看'}

@@ -18,6 +18,7 @@ export interface BuyerData {
   needs?: string
   area?: string
   nextFollowUp?: string
+  birthday?: string | null
 }
 
 export interface PropertyData {
