@@ -84,7 +84,6 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
           action,
           summary: task.summary,
           description: task.description,
-          distanceKm: task.distanceKm,
         }),
       })
       const data = await res.json()
@@ -244,12 +243,6 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                     <span style={{ textDecoration: 'underline', textDecorationColor: '#555', textUnderlineOffset: 2 }}>
                       {t.location}
                     </span>
-                    {t.distanceKm !== null && (
-                      <span style={{ marginLeft: 6, color: '#FFD86B', fontSize: 18 }}>
-                        {t.distanceKm.toFixed(1)}km
-                        {t.distanceBonus > 0 && ` (+${t.distanceBonus})`}
-                      </span>
-                    )}
                   </div>
                 )}
 
@@ -312,6 +305,12 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                           </a>
                         ) : (
                           <span style={{ color: '#A0A3AF' }}>{t.viewingExtras.colleagueName}</span>
+                        )}
+                        {t.viewingExtras.note?.trim() && (
+                          <span style={{ color: '#A0A3AF' }}>
+                            {' · '}
+                            {t.viewingExtras.note.trim()}
+                          </span>
                         )}
                       </div>
                     )}

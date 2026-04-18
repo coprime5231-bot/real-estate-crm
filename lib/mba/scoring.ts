@@ -35,12 +35,6 @@ export const VIEWING_SCORE: Record<
   interested: { baseScore: 60, cardColor: 'green' },
 }
 
-/** 距離加分：<10km=0、10–20=10、20–30=20... */
-export function distanceBonus(km: number | null | undefined): number {
-  if (km == null || km < 10) return 0
-  return Math.floor(km / 10) * 10
-}
-
 /** 等級門檻：Lv n 累計 = n(n+1)/2 * 100 */
 export function levelFromTotal(total: number): { level: number; next: number; prev: number } {
   let lv = 1

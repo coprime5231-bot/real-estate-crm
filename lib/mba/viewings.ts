@@ -7,6 +7,7 @@ export interface ViewingExtras {
   colleagueName: string | null
   colleaguePhone: string | null
   location: string | null
+  note: string | null
 }
 
 /**
@@ -18,7 +19,7 @@ export async function getViewingByCalendarEventId(
 ): Promise<ViewingExtras | null> {
   const res = await pool.query(
     `SELECT community_name, community_url, community_leju_url,
-            colleague_name, colleague_phone, location
+            colleague_name, colleague_phone, location, note
      FROM viewings
      WHERE calendar_event_id = $1
      LIMIT 1`,
@@ -33,5 +34,6 @@ export async function getViewingByCalendarEventId(
     colleagueName: row.colleague_name ?? null,
     colleaguePhone: row.colleague_phone ?? null,
     location: row.location ?? null,
+    note: row.note ?? null,
   }
 }

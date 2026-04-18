@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool, currentQuarter } from '@/lib/mba/db'
-import { VISIT_SCORE, distanceBonus as calcDistanceBonus } from '@/lib/mba/scoring'
+import { VISIT_SCORE } from '@/lib/mba/scoring'
 import { handleVisitWriteback } from '@/lib/mba/notion-writeback'
 import { updateEventColor } from '@/lib/mba/google-calendar'
 import { refreshDailyStats } from '@/lib/mba/daily-stats'
@@ -14,12 +14,11 @@ type VisitAction = (typeof VALID_ACTIONS)[number]
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
-    const { eventId, action, summary, description, distanceKm } = body as {
+    const { eventId, action, summary, description } = body as {
       eventId?: string
       action?: string
       summary?: string
       description?: string | null
-      distanceKm?: number | null
     }
 
     if (
@@ -42,9 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     const spec = VISIT_SCORE[act]
-    const bonus = calcDistanceBonus(distanceKm)
-    const totalScore = spec.baseScore + bonus
-
+    const totalScore = spec.baseScore
     const starsAwarded = 3
 
     const result = await pool.query(
@@ -58,10 +55,10 @@ export async function POST(req: NextRequest) {
         act,
         eventId,
         spec.baseScore,
-        bonus,
+        0,
         totalScore,
         spec.cardColor,
-        distanceKm ?? null,
+        null,
         quarter,
         starsAwarded,
       ],

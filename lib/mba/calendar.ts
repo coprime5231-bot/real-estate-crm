@@ -36,12 +36,10 @@ export interface MbaTaskCard {
 }
 
 /**
- * API 回傳給前端的完整卡片（MbaTaskCard + 完成狀態 + 距離）
+ * API 回傳給前端的完整卡片（MbaTaskCard + 完成狀態 + 帶看延伸欄位）
  */
 export interface TodayTask extends MbaTaskCard {
   isDone: boolean
-  distanceKm: number | null
-  distanceBonus: number
   /** 帶看延伸欄位（從 PG viewings 讀）；非帶看事件或查無資料則為 null */
   viewingExtras: ViewingExtras | null
 }
