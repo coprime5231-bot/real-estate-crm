@@ -20,6 +20,7 @@ export interface Client {
   slaStatus?: SLAStatus
   daysSinceEdit?: number
   hasNextStep?: boolean
+  textId?: string | null
 }
 
 export interface Property {

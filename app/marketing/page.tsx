@@ -34,6 +34,10 @@ import ClientViewingsTab from '@/components/ClientViewingsTab'
 
 type Tab = 'marketing' | 'entrust' | 'videos' | 'ai'
 
+// Phase 1 灰度：只對這三筆客戶顯示「物件配對」按鈕
+// Phase 2 擴大時把陣列清空或改成全開
+const OBJECT_MATCH_WHITELIST = ['B67', 'B58', 'B71']
+
 // 從待辦標題中解析日期（格式：尾部的 (M/D) 或 (YYYY/M/D)）
 function parseTodoDate(title: string): Date | null {
   const m = title.match(/\((\d{4}\/)?(\d{1,2})\/(\d{1,2})\)\s*$/)
@@ -1281,6 +1285,26 @@ export default function MarketingPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {/* 物件配對（Phase 1 白名單）— 跳 i智慧 深連結 */}
+                        {selectedClient.name?.trim() &&
+                          selectedClient.textId &&
+                          OBJECT_MATCH_WHITELIST.includes(selectedClient.textId.trim()) && (
+                            <button
+                              onClick={() => {
+                                const name = encodeURIComponent(selectedClient.name.trim())
+                                const id = encodeURIComponent(selectedClient.textId!.trim())
+                                window.open(
+                                  `https://is.ycut.com.tw/magent/CustomerNew.aspx#match=${name}&id=${id}`,
+                                  '_blank',
+                                  'noopener,noreferrer'
+                                )
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+                              title="到 i智慧 物件配對頁"
+                            >
+                              🔗 物件配對
+                            </button>
+                          )}
                         {/* B. 設跟進日按鈕 */}
                         <div className="relative">
                           <button

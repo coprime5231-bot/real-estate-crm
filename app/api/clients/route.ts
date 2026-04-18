@@ -37,6 +37,15 @@ function extractRelation(prop: any): string[] {
   return prop.relation.map((r: any) => r.id).filter(Boolean)
 }
 
+// 從 Notion formula 屬性安全讀取 string；非 string 型或欄位缺失回 null
+function readFormulaString(prop: unknown): string | null {
+  if (!prop || typeof prop !== 'object') return null
+  const p = prop as { type?: string; formula?: { type?: string; string?: string | null } }
+  if (p.type !== 'formula') return null
+  if (p.formula?.type !== 'string') return null
+  return p.formula.string ?? null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const buyerDbId = process.env.NOTION_BUYER_DB_ID
@@ -105,6 +114,9 @@ export async function GET(request: NextRequest) {
         // 生日（Notion date 型別，只關心 .start；比對月-日時忽略年份）
         const birthday = (p['生日']?.date?.start as string | undefined) ?? null
 
+        // 文字ID（Notion formula → string，例 "B58"）
+        const textId = readFormulaString(p['文字ID'])
+
         // SLA 計算
         const lastEditedTime = p['上次編輯時間']?.last_edited_time || (page as any).last_edited_time
         const createdTime = (page as any).created_time
@@ -123,6 +135,7 @@ export async function GET(request: NextRequest) {
           area: areaArr.length ? areaArr.join('、') : undefined,
           nextFollowUp,
           birthday,
+          textId,
           needTags: extractMultiSelect(p['需求標籤']),
           todoIds: extractRelation(p['待辦事項']),
           // SLA 欄位
