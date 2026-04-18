@@ -113,13 +113,15 @@ export async function createEvent(
  * @param startISO 起始時間 ISO 字串（含 tz offset，例 "2026-04-20T14:00:00+08:00"）
  * @param durationMinutes 事件長度（分鐘），預設 30
  * @param description 事件說明（帶看可放買方 Notion URL）
+ * @param location 事件地點（會顯示在 Calendar event 📍 欄位）
  * @returns 新建的事件 ID
  */
 export async function createTimedEvent(
   summary: string,
   startISO: string,
   durationMinutes: number = 30,
-  description?: string
+  description?: string,
+  location?: string
 ): Promise<string> {
   const cal = getCalendarClient()
   const start = new Date(startISO)
@@ -127,14 +129,19 @@ export async function createTimedEvent(
     throw new Error(`Invalid startISO: ${startISO}`)
   }
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000)
+  const trimmedLocation = location?.trim()
+  const requestBody: calendar_v3.Schema$Event = {
+    summary,
+    description,
+    start: { dateTime: start.toISOString(), timeZone: TZ },
+    end: { dateTime: end.toISOString(), timeZone: TZ },
+  }
+  if (trimmedLocation) {
+    requestBody.location = trimmedLocation
+  }
   const res = await cal.events.insert({
     calendarId: CALENDAR_ID,
-    requestBody: {
-      summary,
-      description,
-      start: { dateTime: start.toISOString(), timeZone: TZ },
-      end: { dateTime: end.toISOString(), timeZone: TZ },
-    },
+    requestBody,
   })
   return res.data.id || ''
 }

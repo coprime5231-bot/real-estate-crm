@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     let calendarEventId: string
     try {
-      calendarEventId = await createTimedEvent(summary, datetime, 30, description)
+      calendarEventId = await createTimedEvent(summary, datetime, 30, description, location.trim())
     } catch (err: any) {
       console.error('Google Calendar createTimedEvent failed:', err?.message || err)
       return NextResponse.json(
