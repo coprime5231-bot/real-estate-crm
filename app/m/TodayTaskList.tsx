@@ -186,7 +186,7 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
               <li
                 key={t.eventId}
                 style={{
-                  padding: done ? '16px 20px' : '32px 40px',
+                  padding: done ? '16px 20px' : t.kind === 'viewing' ? '48px 56px' : '32px 40px',
                   marginBottom: 12,
                   background: done ? '#1E2130' : '#2A2E3C',
                   borderRadius: 14,
@@ -203,13 +203,13 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                     alignItems: 'baseline',
                   }}
                 >
-                  <div style={{ fontWeight: 600, fontSize: done ? 17 : 24 }}>
+                  <div style={{ fontWeight: 600, fontSize: done ? 17 : t.kind === 'viewing' ? 28 : 24 }}>
                     <span
                       style={{
                         display: 'inline-block',
                         padding: '2px 8px',
                         marginRight: 8,
-                        fontSize: done ? 11 : 14,
+                        fontSize: done ? 11 : t.kind === 'viewing' ? 16 : 14,
                         borderRadius: 4,
                         background:
                           t.kind === 'viewing' ? '#A060FF' : '#4A9EFF',
@@ -220,7 +220,7 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                     </span>
                     {done && '✅ '}{t.summary}
                   </div>
-                  <div style={{ fontSize: done ? 13 : 16, color: '#8B8FA3', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                  <div style={{ fontSize: done ? 13 : t.kind === 'viewing' ? 18 : 16, color: '#8B8FA3', whiteSpace: 'nowrap', marginLeft: 8 }}>
                     {t.timeLabel}
                   </div>
                 </div>
@@ -252,32 +252,65 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                 )}
 
                 {!done && t.kind === 'viewing' && t.viewingExtras && (
-                  <div style={{ marginTop: 8, fontSize: 16, lineHeight: 1.7 }}>
-                    {t.viewingExtras.communityUrl && (
-                      <div>
-                        <a
-                          href={t.viewingExtras.communityUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: '#FFD86B', textDecoration: 'none' }}
-                        >
-                          🏢 社區連結
-                        </a>
+                  <div style={{ marginTop: 14, fontSize: 18, lineHeight: 1.7 }}>
+                    {(t.viewingExtras.communityLejuUrl ||
+                      (t.viewingExtras.communityName && t.viewingExtras.communityUrl)) && (
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                        {t.viewingExtras.communityLejuUrl && (
+                          <a
+                            href={t.viewingExtras.communityLejuUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-block',
+                              padding: '12px 20px',
+                              minHeight: 44,
+                              fontSize: 18,
+                              fontWeight: 600,
+                              borderRadius: 8,
+                              background: '#3A4055',
+                              color: '#FFD86B',
+                              textDecoration: 'none',
+                            }}
+                          >
+                            樂居
+                          </a>
+                        )}
+                        {t.viewingExtras.communityName && t.viewingExtras.communityUrl && (
+                          <a
+                            href={t.viewingExtras.communityUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-block',
+                              padding: '12px 20px',
+                              minHeight: 44,
+                              fontSize: 18,
+                              fontWeight: 600,
+                              borderRadius: 8,
+                              background: '#3A4055',
+                              color: '#FFD86B',
+                              textDecoration: 'none',
+                            }}
+                          >
+                            {t.viewingExtras.communityName}
+                          </a>
+                        )}
                       </div>
                     )}
                     {t.viewingExtras.colleagueName && (
-                      <div style={{ color: '#A0A3AF' }}>
-                        👤 同事：{t.viewingExtras.colleagueName}
-                      </div>
-                    )}
-                    {t.viewingExtras.colleaguePhone && (
                       <div>
-                        <a
-                          href={`tel:${t.viewingExtras.colleaguePhone}`}
-                          style={{ color: '#FFD86B', textDecoration: 'none' }}
-                        >
-                          📞 {t.viewingExtras.colleaguePhone}
-                        </a>
+                        <span style={{ marginRight: 6 }}>👤</span>
+                        {t.viewingExtras.colleaguePhone ? (
+                          <a
+                            href={`tel:${t.viewingExtras.colleaguePhone}`}
+                            style={{ color: '#FFD86B', textDecoration: 'none', fontWeight: 600 }}
+                          >
+                            {t.viewingExtras.colleagueName}
+                          </a>
+                        ) : (
+                          <span style={{ color: '#A0A3AF' }}>{t.viewingExtras.colleagueName}</span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -286,9 +319,9 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                 {!done && (
                   <div
                     style={{
-                      marginTop: 14,
+                      marginTop: t.kind === 'viewing' ? 22 : 14,
                       display: 'flex',
-                      gap: 8,
+                      gap: t.kind === 'viewing' ? 12 : 8,
                       flexWrap: 'wrap',
                     }}
                   >
@@ -333,11 +366,12 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                             }
                             style={{
                               flex: 1,
-                              minWidth: 80,
-                              padding: '12px 16px',
-                              fontSize: 20,
+                              minWidth: 120,
+                              minHeight: 56,
+                              padding: '16px 20px',
+                              fontSize: 22,
                               border: 'none',
-                              borderRadius: 8,
+                              borderRadius: 10,
                               background:
                                 b.action === 'yes'
                                   ? '#A060FF'
@@ -349,7 +383,7 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                                   : 'pointer',
                               opacity:
                                 loading && loading !== b.action ? 0.5 : 1,
-                              fontWeight: b.action === 'yes' ? 700 : 400,
+                              fontWeight: b.action === 'yes' ? 700 : 600,
                             }}
                           >
                             {loading === b.action ? '...' : b.label}
