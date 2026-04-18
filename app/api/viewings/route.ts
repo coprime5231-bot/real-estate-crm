@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // 建 Google Calendar 事件
     const buyerNotionUrl = `https://www.notion.so/${String(buyerId).replace(/-/g, '')}`
-    const summary = `帶看 ${buyerName || '客戶'} - ${location.trim()}`
+    const summary = `帶看 ${buyerName || '客戶'}${communityName?.trim() ? ` ${communityName.trim()}` : ''}`.trim()
     const descLines = [
       `買方：${buyerName || ''}`.trim(),
       `買方 Notion：${buyerNotionUrl}`,
