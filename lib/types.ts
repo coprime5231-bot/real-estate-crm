@@ -87,3 +87,9 @@ export interface Block {
   text: string
   createdTime: string
 }
+
+export interface Community {
+  id: number
+  name: string
+  leju_url: string | null
+}

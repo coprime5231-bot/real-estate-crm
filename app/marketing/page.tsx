@@ -28,6 +28,7 @@ import { daysUntil, isOverdue, formatDate } from '@/lib/notion'
 import VideosPage from '@/app/videos/page'
 import AIPage from '@/app/ai/page'
 import DateTimePopover, { formatTodayISO, computeDefaultTime } from '@/components/DateTimePopover'
+import CommunityAutocomplete from '@/components/CommunityAutocomplete'
 
 type Tab = 'marketing' | 'entrust' | 'videos' | 'ai'
 
@@ -1683,17 +1684,20 @@ export default function MarketingPage() {
                 />
               </div>
 
-              {/* 4. 社區名稱 */}
+              {/* 4. 社區名稱（autocomplete：選中自動帶樂居連結） */}
               <div>
                 <label className="block text-sm text-slate-400 mb-1">
-                  社區名稱 <span className="text-slate-500 text-xs">(選填)</span>
+                  社區名稱 <span className="text-slate-500 text-xs">(選填，輸入歷史社區可自動帶樂居連結)</span>
                 </label>
-                <input
-                  type="text"
-                  value={viewingCommunityName}
-                  onChange={(e) => setViewingCommunityName(e.target.value)}
+                <CommunityAutocomplete
+                  name={viewingCommunityName}
+                  onChange={setViewingCommunityName}
+                  onSelectCommunity={(c) => {
+                    setViewingCommunityName(c.name)
+                    if (c.leju_url) setViewingCommunityLejuUrl(c.leju_url)
+                  }}
                   placeholder="例如：太普"
-                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  inputClassName="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 

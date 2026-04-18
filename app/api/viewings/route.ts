@@ -75,9 +75,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // INSERT 到 viewings 表
+    // INSERT viewings + upsert communities（單一 transaction）
+    const client = await pool.connect()
     try {
-      const insertRes = await pool.query(
+      await client.query('BEGIN')
+
+      const insertRes = await client.query(
         `INSERT INTO viewings (
           calendar_event_id, notion_buyer_id, datetime, location,
           community_name, community_url, community_leju_url,
@@ -98,14 +101,29 @@ export async function POST(request: NextRequest) {
         ]
       )
       const row = insertRes.rows[0]
+
+      // 有社區名才 upsert；新值為 null 時保留舊值（COALESCE）
+      const trimmedName = communityName?.trim() || ''
+      if (trimmedName) {
+        await client.query(
+          `INSERT INTO communities (name, leju_url)
+           VALUES ($1, $2)
+           ON CONFLICT (name) DO UPDATE SET
+             leju_url = COALESCE(EXCLUDED.leju_url, communities.leju_url),
+             updated_at = NOW()`,
+          [trimmedName, communityLejuUrl?.trim() || null]
+        )
+      }
+
+      await client.query('COMMIT')
       return NextResponse.json({
         id: row.id,
         calendarEventId,
         createdAt: row.created_at,
       })
     } catch (err: any) {
-      console.error('INSERT viewings failed:', err?.message || err)
-      // 盡量報明確錯誤，但 Calendar 事件已建立，告知使用者以便人工修正
+      await client.query('ROLLBACK').catch(() => {})
+      console.error('INSERT viewings/communities failed:', err?.message || err)
       return NextResponse.json(
         {
           error: 'Calendar 事件已建立，但 viewings 表寫入失敗',
@@ -114,6 +132,8 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 }
       )
+    } finally {
+      client.release()
     }
   } catch (error: any) {
     console.error('Failed to create viewing:', error)
