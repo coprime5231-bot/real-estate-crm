@@ -1271,6 +1271,26 @@ export default function MarketingPage() {
                               📱 {selectedClient.phone}
                             </span>
                           )}
+                          {/* 物件配對（Phase 1 白名單）— 跳 i智慧 深連結 */}
+                          {selectedClient.name?.trim() &&
+                            selectedClient.textId &&
+                            OBJECT_MATCH_WHITELIST.includes(selectedClient.textId.trim()) && (
+                              <button
+                                onClick={() => {
+                                  const name = encodeURIComponent(selectedClient.name.trim())
+                                  const id = encodeURIComponent(selectedClient.textId!.trim())
+                                  window.open(
+                                    `https://is.ycut.com.tw/magent/CustomerNew.aspx#match=${name}&id=${id}`,
+                                    '_blank',
+                                    'noopener,noreferrer'
+                                  )
+                                }}
+                                className="flex items-center gap-1 px-2 py-0.5 text-xs bg-slate-700/60 hover:bg-slate-600 text-slate-300 rounded transition-colors whitespace-nowrap"
+                                title="到 i智慧 物件配對頁"
+                              >
+                                🔗 物件配對
+                              </button>
+                            )}
                           {isOverdue(selectedClient.nextFollowUp) && (
                             <span className="text-sm text-red-400 font-medium flex items-center gap-1 whitespace-nowrap">
                               <AlertTriangle size={14} />
@@ -1285,26 +1305,6 @@ export default function MarketingPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* 物件配對（Phase 1 白名單）— 跳 i智慧 深連結 */}
-                        {selectedClient.name?.trim() &&
-                          selectedClient.textId &&
-                          OBJECT_MATCH_WHITELIST.includes(selectedClient.textId.trim()) && (
-                            <button
-                              onClick={() => {
-                                const name = encodeURIComponent(selectedClient.name.trim())
-                                const id = encodeURIComponent(selectedClient.textId!.trim())
-                                window.open(
-                                  `https://is.ycut.com.tw/magent/CustomerNew.aspx#match=${name}&id=${id}`,
-                                  '_blank',
-                                  'noopener,noreferrer'
-                                )
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
-                              title="到 i智慧 物件配對頁"
-                            >
-                              🔗 物件配對
-                            </button>
-                          )}
                         {/* B. 設跟進日按鈕 */}
                         <div className="relative">
                           <button
