@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { listTodayEvents } from '@/lib/mba/google-calendar'
 import { parseTodayEvents } from '@/lib/mba/calendar'
 import { geocodeAddress, distanceFromHome, distanceBonus } from '@/lib/mba/geocoding'
+import { getViewingByCalendarEventId } from '@/lib/mba/viewings'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,20 +25,27 @@ export async function GET() {
 
     const enriched = await Promise.all(
       cards.map(async (c) => {
+        const [geo, viewingExtras] = await Promise.all([
+          c.location ? geocodeAddress(c.location) : Promise.resolve(null),
+          c.kind === 'viewing'
+            ? getViewingByCalendarEventId(c.eventId).catch((err) => {
+                console.error('[api/m/calendar/today] viewings lookup failed:', err)
+                return null
+              })
+            : Promise.resolve(null),
+        ])
         let distanceKm: number | null = null
         let bonus = 0
-        if (c.location) {
-          const geo = await geocodeAddress(c.location)
-          if (geo) {
-            distanceKm = distanceFromHome(geo.lat, geo.lng)
-            bonus = distanceBonus(distanceKm)
-          }
+        if (geo) {
+          distanceKm = distanceFromHome(geo.lat, geo.lng)
+          bonus = distanceBonus(distanceKm)
         }
         return {
           ...c,
           isDone: c.colorId === '8',
           distanceKm,
           distanceBonus: bonus,
+          viewingExtras,
         }
       })
     )

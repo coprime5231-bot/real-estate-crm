@@ -251,6 +251,38 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                   </div>
                 )}
 
+                {!done && t.kind === 'viewing' && t.viewingExtras && (
+                  <div style={{ marginTop: 8, fontSize: 16, lineHeight: 1.7 }}>
+                    {t.viewingExtras.communityUrl && (
+                      <div>
+                        <a
+                          href={t.viewingExtras.communityUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#FFD86B', textDecoration: 'none' }}
+                        >
+                          🏢 社區連結
+                        </a>
+                      </div>
+                    )}
+                    {t.viewingExtras.colleagueName && (
+                      <div style={{ color: '#A0A3AF' }}>
+                        👤 同事：{t.viewingExtras.colleagueName}
+                      </div>
+                    )}
+                    {t.viewingExtras.colleaguePhone && (
+                      <div>
+                        <a
+                          href={`tel:${t.viewingExtras.colleaguePhone}`}
+                          style={{ color: '#FFD86B', textDecoration: 'none' }}
+                        >
+                          📞 {t.viewingExtras.colleaguePhone}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {!done && (
                   <div
                     style={{
