@@ -69,6 +69,23 @@ export async function POST(req: NextRequest) {
     })
     const buyerOk: boolean | null = wb?.success ?? null
 
+    // CRM viewings.opinion 單向同步（MBA → CRM）。Notion 成功才跟著寫；
+    // 影響 0 列靜默忽略、失敗只記 log、不回滾 Notion、不影響 MBA UI。
+    if (wb?.success && wb.pageId) {
+      const opinion = act === 'yes' ? 'liked' : 'disliked'
+      await pool
+        .query(
+          `UPDATE viewings
+             SET opinion = $1
+             WHERE calendar_event_id = $2
+               AND notion_buyer_id = $3`,
+          [opinion, eventId, wb.pageId],
+        )
+        .catch((err) => {
+          console.error('[viewing] sync viewings.opinion failed', err)
+        })
+    }
+
     await updateEventColor(eventId, '8').catch((err) => {
       console.error('[viewing] calendar color update failed', err)
     })

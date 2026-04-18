@@ -1,13 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Eye, Plus } from 'lucide-react'
+import { Eye } from 'lucide-react'
 import type { Viewing } from '@/lib/types'
 import ViewingCard from './ViewingCard'
 
 interface Props {
   clientId: string
-  onOpenAddModal: () => void
 }
 
 // 本地排序：🟣 → 預設 → ⚫，同組 datetime DESC。API 已這樣回，但切換 opinion 後需即時重排。
@@ -22,7 +21,7 @@ function sortViewings(list: Viewing[]): Viewing[] {
   })
 }
 
-export default function ClientViewingsTab({ clientId, onOpenAddModal }: Props) {
+export default function ClientViewingsTab({ clientId }: Props) {
   const [viewings, setViewings] = useState<Viewing[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -75,29 +74,15 @@ export default function ClientViewingsTab({ clientId, onOpenAddModal }: Props) {
     return (
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-8 text-center">
         <Eye size={32} className="mx-auto mb-3 text-slate-600" />
-        <p className="text-sm text-slate-400 mb-3">尚無帶看記錄</p>
-        <button
-          onClick={onOpenAddModal}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-sky-700 hover:bg-sky-600 text-white rounded-lg transition-colors"
-        >
-          <Plus size={14} />
-          新增帶看
-        </button>
+        <p className="text-sm text-slate-400">尚無帶看記錄</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center">
         <span className="text-xs text-slate-500">共 {viewings.length} 筆</span>
-        <button
-          onClick={onOpenAddModal}
-          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-sky-700 hover:bg-sky-600 text-white rounded transition-colors"
-        >
-          <Plus size={12} />
-          新增帶看
-        </button>
       </div>
       {viewings.map((v) => (
         <ViewingCard

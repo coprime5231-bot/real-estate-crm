@@ -1408,7 +1408,6 @@ export default function MarketingPage() {
                     {detailTab === 'viewings' && (
                       <ClientViewingsTab
                         clientId={selectedClient.id}
-                        onOpenAddModal={openViewingModal}
                       />
                     )}
 
