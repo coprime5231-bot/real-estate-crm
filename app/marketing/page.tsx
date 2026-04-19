@@ -167,18 +167,19 @@ export default function MarketingPage() {
   const [ismartLookupInput, setIsmartLookupInput] = useState('')
   const [ismartLookupStatus, setIsmartLookupStatus] = useState<'idle' | 'loading' | 'ok' | 'error' | 'auth_expired'>('idle')
   const [ismartLookupMessage, setIsmartLookupMessage] = useState('')
+  const [userscriptReady, setUserscriptReady] = useState(false)
   const ismartRequestIdRef = useRef<string | null>(null)
   const ismartTimeoutRef = useRef<number | null>(null)
 
   // === A1. 頂部收合 ===
-  const [importantCollapsed, setImportantCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') return localStorage.getItem('crm.topBar.importantCollapsed') === 'true'
-    return false
-  })
-  const [todoCollapsed, setTodoCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') return localStorage.getItem('crm.topBar.todoCollapsed') === 'true'
-    return false
-  })
+  // 初值固定為 false，實際值在 mount 後用 effect 從 localStorage 補讀，
+  // 否則 SSR(false) 與 CSR(localStorage) 不一致會觸發 React #418/#423 hydration 錯誤。
+  const [importantCollapsed, setImportantCollapsed] = useState(false)
+  const [todoCollapsed, setTodoCollapsed] = useState(false)
+  useEffect(() => {
+    setImportantCollapsed(localStorage.getItem('crm.topBar.importantCollapsed') === 'true')
+    setTodoCollapsed(localStorage.getItem('crm.topBar.todoCollapsed') === 'true')
+  }, [])
 
   // === A2. 頂部快速輸入 ===
   const [quickImportantText, setQuickImportantText] = useState('')
@@ -745,7 +746,7 @@ export default function MarketingPage() {
       ismartRequestIdRef.current = null
       setIsmartLookupStatus('error')
       setIsmartLookupMessage('⚠️ userscript 無回應，請確認 Tampermonkey 已啟用 + 已安裝 userscript')
-    }, 10000) as unknown as number
+    }, 15000) as unknown as number
   }
 
   // U2: 送出新增帶看
@@ -903,7 +904,9 @@ export default function MarketingPage() {
         }
         setIsmartLookupStatus('ok')
         const bits = [d.communityName, d.agentName].filter(Boolean).join(' / ')
-        setIsmartLookupMessage(bits ? `✅ 已帶入（${bits}）` : '✅ 已帶入')
+        const base = bits ? `✅ 已帶入（${bits}）` : '✅ 已帶入'
+        const missing = Array.isArray(data.missing) ? data.missing : []
+        setIsmartLookupMessage(missing.length ? `${base}｜未帶入：${missing.join('、')}` : base)
       } else {
         const error = (data.error || '') as string
         const message = (data.message || '查詢失敗') as string
@@ -919,6 +922,22 @@ export default function MarketingPage() {
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
   }, [])
+
+  // B6: Modal 打開時做 PING/PONG 握手，確認 userscript 有在這個 tab 活著。
+  // 放在獨立 useEffect 裡，不跟 SSR/hydration 打架。
+  useEffect(() => {
+    if (!showViewingModal) return
+    setUserscriptReady(false)
+    const handler = (event: MessageEvent) => {
+      if (event.source !== window) return
+      const data = event.data as any
+      if (!data || typeof data !== 'object') return
+      if (data.type === 'CRM_ISMART_PONG') setUserscriptReady(true)
+    }
+    window.addEventListener('message', handler)
+    window.postMessage({ type: 'CRM_ISMART_PING' }, '*')
+    return () => window.removeEventListener('message', handler)
+  }, [showViewingModal])
 
   // ===================== Render helpers =====================
 
@@ -1796,8 +1815,13 @@ export default function MarketingPage() {
             <div className="space-y-2.5">
               {/* B6: i智慧 物件自動帶入 */}
               <div className="rounded border border-indigo-800/60 bg-indigo-950/40 px-3 py-2">
-                <label className="block text-xs text-indigo-300 mb-1">
-                  i智慧 物件編號 <span className="text-slate-500">(選填，自動帶入社區 / 樓層 / 永慶連結 / 同事)</span>
+                <label className="block text-xs text-indigo-300 mb-1 flex items-center gap-2">
+                  <span>i智慧 物件編號 <span className="text-slate-500">(選填，自動帶入社區 / 樓層 / 永慶連結 / 同事)</span></span>
+                  {userscriptReady ? (
+                    <span className="text-[10px] text-emerald-400">● userscript ok</span>
+                  ) : (
+                    <span className="text-[10px] text-amber-400">● 等待 userscript…</span>
+                  )}
                 </label>
                 <div className="flex items-center gap-2">
                   <input
