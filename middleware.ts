@@ -4,6 +4,12 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // ===== 公開路徑（不檢查登入）=====
+  // /userscripts/*：Tampermonkey auto-update fetch 不會帶 cookie，且檔案本身是前端 .js 無敏感資訊
+  if (pathname.startsWith('/userscripts/')) {
+    return NextResponse.next()
+  }
+
   // ===== MBA（/m/*）走 mba-auth =====
   if (pathname === '/m' || pathname.startsWith('/m/') || pathname.startsWith('/api/m/')) {
     if (pathname === '/m/login' || pathname === '/api/m/auth') {
