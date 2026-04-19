@@ -163,6 +163,12 @@ export default function MarketingPage() {
   const [viewingColleaguePhone, setViewingColleaguePhone] = useState('')
   const [viewingNote, setViewingNote] = useState('')
   const [creatingViewing, setCreatingViewing] = useState(false)
+  // B6: i智慧 物件編號 → 自動帶入
+  const [ismartLookupInput, setIsmartLookupInput] = useState('')
+  const [ismartLookupStatus, setIsmartLookupStatus] = useState<'idle' | 'loading' | 'ok' | 'error' | 'auth_expired'>('idle')
+  const [ismartLookupMessage, setIsmartLookupMessage] = useState('')
+  const ismartRequestIdRef = useRef<string | null>(null)
+  const ismartTimeoutRef = useRef<number | null>(null)
 
   // === A1. 頂部收合 ===
   const [importantCollapsed, setImportantCollapsed] = useState(() => {
@@ -709,7 +715,37 @@ export default function MarketingPage() {
     setViewingColleagueName('')
     setViewingColleaguePhone('')
     setViewingNote('')
+    setIsmartLookupInput('')
+    setIsmartLookupStatus('idle')
+    setIsmartLookupMessage('')
+    ismartRequestIdRef.current = null
+    if (ismartTimeoutRef.current) {
+      window.clearTimeout(ismartTimeoutRef.current)
+      ismartTimeoutRef.current = null
+    }
     setShowViewingModal(true)
+  }
+
+  // B6: i智慧 物件查詢（透過 Tampermonkey userscript 代打 API）
+  const handleIsmartLookup = () => {
+    const input = ismartLookupInput.trim()
+    if (!input) return
+    if (ismartLookupStatus === 'loading') return
+    const requestId =
+      (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `req-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    ismartRequestIdRef.current = requestId
+    setIsmartLookupStatus('loading')
+    setIsmartLookupMessage('查詢中…')
+    window.postMessage({ type: 'CRM_ISMART_LOOKUP', requestId, caseNumber: input }, '*')
+    if (ismartTimeoutRef.current) window.clearTimeout(ismartTimeoutRef.current)
+    ismartTimeoutRef.current = window.setTimeout(() => {
+      if (ismartRequestIdRef.current !== requestId) return
+      ismartRequestIdRef.current = null
+      setIsmartLookupStatus('error')
+      setIsmartLookupMessage('⚠️ userscript 無回應，請確認 Tampermonkey 已啟用 + 已安裝 userscript')
+    }, 10000) as unknown as number
   }
 
   // U2: 送出新增帶看
@@ -836,6 +872,53 @@ export default function MarketingPage() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeTab, filteredClients, selectedClientId])
+
+  // B6: 監聽 userscript 回傳的 i智慧 查詢結果
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.source !== window) return
+      const data = event.data as any
+      if (!data || typeof data !== 'object') return
+      if (data.type !== 'CRM_ISMART_LOOKUP_RESULT') return
+      if (data.requestId !== ismartRequestIdRef.current) return
+      if (ismartTimeoutRef.current) {
+        window.clearTimeout(ismartTimeoutRef.current)
+        ismartTimeoutRef.current = null
+      }
+      ismartRequestIdRef.current = null
+
+      if (data.ok && data.data) {
+        const d = data.data
+        if (d.communityName) setViewingCommunityName(d.communityName)
+        if (d.shareUrl) setViewingCommunityUrl(d.shareUrl)
+        if (d.agentName) setViewingColleagueName(d.agentName)
+        if (d.agentPhone) setViewingColleaguePhone(d.agentPhone)
+        if (d.floor) {
+          setViewingNote((prev) => {
+            const floorLine = d.floor as string
+            if (!prev) return floorLine
+            if (prev.startsWith(floorLine)) return prev
+            return `${floorLine}\n${prev}`
+          })
+        }
+        setIsmartLookupStatus('ok')
+        const bits = [d.communityName, d.agentName].filter(Boolean).join(' / ')
+        setIsmartLookupMessage(bits ? `✅ 已帶入（${bits}）` : '✅ 已帶入')
+      } else {
+        const error = (data.error || '') as string
+        const message = (data.message || '查詢失敗') as string
+        if (error === 'auth_expired') {
+          setIsmartLookupStatus('auth_expired')
+          setIsmartLookupMessage(message)
+        } else {
+          setIsmartLookupStatus('error')
+          setIsmartLookupMessage(`⚠️ ${message}`)
+        }
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
 
   // ===================== Render helpers =====================
 
@@ -1711,6 +1794,63 @@ export default function MarketingPage() {
             </button>
 
             <div className="space-y-2.5">
+              {/* B6: i智慧 物件自動帶入 */}
+              <div className="rounded border border-indigo-800/60 bg-indigo-950/40 px-3 py-2">
+                <label className="block text-xs text-indigo-300 mb-1">
+                  i智慧 物件編號 <span className="text-slate-500">(選填，自動帶入社區 / 樓層 / 永慶連結 / 同事)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={ismartLookupInput}
+                    onChange={(e) => setIsmartLookupInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleIsmartLookup()
+                      }
+                    }}
+                    placeholder="例如：1847905（或貼 i智慧 detail URL）"
+                    disabled={ismartLookupStatus === 'loading'}
+                    className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleIsmartLookup}
+                    disabled={!ismartLookupInput.trim() || ismartLookupStatus === 'loading'}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm rounded transition-colors whitespace-nowrap"
+                  >
+                    {ismartLookupStatus === 'loading' ? '查詢中…' : '🔍 帶入'}
+                  </button>
+                </div>
+                {ismartLookupMessage && (
+                  <div
+                    className={`mt-1.5 text-xs ${
+                      ismartLookupStatus === 'ok'
+                        ? 'text-emerald-400'
+                        : ismartLookupStatus === 'loading'
+                        ? 'text-slate-400'
+                        : 'text-amber-400'
+                    }`}
+                  >
+                    {ismartLookupMessage}
+                    {ismartLookupStatus === 'auth_expired' && (
+                      <>
+                        {' '}
+                        <a
+                          href="https://is.ycut.com.tw/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-amber-300"
+                        >
+                          （點這裡開 i智慧）
+                        </a>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* 1. 日期時間 */}
               <div>
                 <label className="block text-sm text-slate-400 mb-1">日期時間 <span className="text-slate-500 text-xs">(30 分鐘事件)</span></label>
