@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.3.0
+// @version      0.3.1
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、樓層、永慶連結、同事、同事手機
 // @author       coprime5231
 // @match        https://coprime5231-crm.zeabur.app/marketing*
 // @match        http://localhost:3000/marketing*
 // @connect      is.ycut.com.tw
 // @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
 // @run-at       document-idle
 // @updateURL    https://coprime5231-crm.zeabur.app/userscripts/b6-lookup.user.js
 // @downloadURL  https://coprime5231-crm.zeabur.app/userscripts/b6-lookup.user.js
@@ -18,7 +19,9 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.3.0';
+  const VERSION = '0.3.1';
+  // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
+  const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
     'Accept': 'application/json, text/plain, */*',
     'websitename': 'IntegrationService_WS',
@@ -209,7 +212,7 @@
   async function handleLookup(msg) {
     const requestId = msg.requestId;
     const reply = (payload) => {
-      window.postMessage(Object.assign({ type: 'CRM_ISMART_LOOKUP_RESULT', requestId }, payload), '*');
+      pageWindow.postMessage(Object.assign({ type: 'CRM_ISMART_LOOKUP_RESULT', requestId }, payload), '*');
     };
 
     try {
@@ -321,18 +324,18 @@
     }
   }
 
-  window.addEventListener('message', function (event) {
-    if (event.source !== window) return;
+  pageWindow.addEventListener('message', function (event) {
+    if (event.source !== pageWindow) return;
     const data = event.data;
     if (!data || typeof data !== 'object') return;
     if (data.type === 'CRM_ISMART_PING') {
-      window.postMessage({ type: 'CRM_ISMART_PONG', version: VERSION }, '*');
+      pageWindow.postMessage({ type: 'CRM_ISMART_PONG', version: VERSION }, '*');
       return;
     }
     if (data.type !== 'CRM_ISMART_LOOKUP') return;
     handleLookup(data);
   });
 
-  window.postMessage({ type: 'CRM_ISMART_PONG', version: VERSION }, '*');
+  pageWindow.postMessage({ type: 'CRM_ISMART_PONG', version: VERSION }, '*');
   LOG('userscript loaded v' + VERSION);
 })();
