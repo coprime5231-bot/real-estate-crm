@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.3.1
-// @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、樓層、永慶連結、同事、同事手機
+// @version      0.4.0
+// @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）
 // @author       coprime5231
 // @match        https://coprime5231-crm.zeabur.app/marketing*
 // @match        http://localhost:3000/marketing*
@@ -19,7 +19,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.3.1';
+  const VERSION = '0.4.0';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -283,6 +283,24 @@
         'url', 'Url', 'URL',
       ]);
 
+      // 地址：從 Detail 挑可能的 key；含「號」才視為完整 → 帶入地點欄
+      const addressRaw = pickDeep(detail, [
+        'address', 'Address',
+        'fullAddress', 'FullAddress',
+        'caseAddress', 'CaseAddress',
+        'houseAddress', 'HouseAddress',
+        'presentAddress', 'PresentAddress',
+        'showAddress', 'ShowAddress',
+        'displayAddress', 'DisplayAddress',
+        'addressStr', 'AddressStr',
+        'addressDisplay', 'AddressDisplay',
+        'addr', 'Addr',
+        '地址',
+      ]);
+      const addressStr = addressRaw ? String(addressRaw).trim() : '';
+      const addressComplete = addressStr.includes('號');
+      const addressValue = addressComplete ? addressStr : '';
+
       const missing = [];
       if (!communityName)   missing.push('社區');
       if (!floorText)       missing.push('樓層');
@@ -308,6 +326,9 @@
           shareUrl: shareUrlValue ? String(shareUrlValue) : '',
           agentName: agentName ? String(agentName) : '',
           agentPhone: agentPhoneRaw ? String(agentPhoneRaw).replace(/[\s\-().]/g, '') : '',
+          address: addressValue,
+          addressRaw: addressStr,
+          addressComplete,
         },
         missing: missing.length ? missing : undefined,
       });

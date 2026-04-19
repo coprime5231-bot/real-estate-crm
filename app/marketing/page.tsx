@@ -890,18 +890,20 @@ export default function MarketingPage() {
 
       if (data.ok && data.data) {
         const d = data.data
-        if (d.communityName) setViewingCommunityName(d.communityName)
-        if (d.shareUrl) setViewingCommunityUrl(d.shareUrl)
-        if (d.agentName) setViewingColleagueName(d.agentName)
-        if (d.agentPhone) setViewingColleaguePhone(d.agentPhone)
-        if (d.floor) {
-          setViewingNote((prev) => {
-            const floorLine = d.floor as string
-            if (!prev) return floorLine
-            if (prev.startsWith(floorLine)) return prev
-            return `${floorLine}\n${prev}`
-          })
+        // B6.1：所有欄位都「空才覆寫」，支援二次按帶入只補空欄、不洗掉手動編輯
+        const applyIfEmpty = (
+          setter: (updater: (prev: string) => string) => void,
+          next?: string,
+        ) => {
+          if (!next) return
+          setter((prev) => (prev.trim() !== '' ? prev : next))
         }
+        applyIfEmpty(setViewingCommunityName, d.communityName)
+        applyIfEmpty(setViewingCommunityUrl, d.shareUrl)
+        applyIfEmpty(setViewingColleagueName, d.agentName)
+        applyIfEmpty(setViewingColleaguePhone, d.agentPhone)
+        applyIfEmpty(setViewingLocation, d.address)
+        // 備註欄不再自動填 x樓/共x樓（使用者要求留空自己寫）
         setIsmartLookupStatus('ok')
         const bits = [d.communityName, d.agentName].filter(Boolean).join(' / ')
         const base = bits ? `✅ 已帶入（${bits}）` : '✅ 已帶入'
