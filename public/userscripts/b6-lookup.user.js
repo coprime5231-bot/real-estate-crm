@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.2.0
+// @version      0.3.0
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、樓層、永慶連結、同事、同事手機
 // @author       coprime5231
 // @match        https://coprime5231-crm.zeabur.app/marketing*
@@ -18,7 +18,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.2.0';
+  const VERSION = '0.3.0';
   const COMMON_HEADERS = {
     'Accept': 'application/json, text/plain, */*',
     'websitename': 'IntegrationService_WS',
@@ -94,6 +94,12 @@
     return !!err && (err.status === 401 || err.status === 403);
   }
 
+  function unwrap(resp) {
+    if (!resp || typeof resp !== 'object') return null;
+    if ('data' in resp) return resp.data;
+    return resp;
+  }
+
   function pickShallow(obj, keys) {
     if (!obj || typeof obj !== 'object') return null;
     for (const k of keys) {
@@ -125,6 +131,18 @@
     return s.trim();
   }
 
+  function buildFloorText(data) {
+    if (!data || typeof data !== 'object') return '';
+    const st = data.floorSt ?? data.FloorSt;
+    const en = data.floorEn ?? data.FloorEn;
+    const up = data.upFloor ?? data.UpFloor;
+    if (st != null) {
+      const base = (en != null && en !== st) ? `${st}-${en}樓` : `${st}樓`;
+      return up != null ? `${base}/共${up}樓` : base;
+    }
+    return '';
+  }
+
   function findUuid(obj) {
     if (obj == null) return null;
     if (typeof obj === 'string') {
@@ -154,7 +172,7 @@
     const uuidMatch = trimmed.match(UUID_RE);
     if (uuidMatch) {
       LOG('input contains UUID — skipping search', uuidMatch[0]);
-      return uuidMatch[0];
+      return { uuid: uuidMatch[0], searchItem: null };
     }
 
     const caseNumber = trimmed.replace(/[^A-Za-z0-9-]/g, '');
@@ -163,24 +181,27 @@
     const searchResp = await gmPost(API_BASE + '/api/Case/Circulating/List', buildSearchBody(caseNumber));
     LOG('search response', searchResp);
 
-    const items = pickShallow(searchResp, ['items', 'Items', 'data', 'Data', 'list', 'List', 'result', 'Result'])
+    const searchData = unwrap(searchResp);
+    const items = pickShallow(searchData, ['caseList', 'CaseList', 'items', 'Items', 'list', 'List', 'result', 'Result'])
+      || (Array.isArray(searchData) ? searchData : null)
       || (Array.isArray(searchResp) ? searchResp : null);
     const firstItem = Array.isArray(items) && items.length > 0 ? items[0] : null;
 
     if (firstItem) {
       const fromKey = pickShallow(firstItem, [
+        'caseKey', 'CaseKey',
         'caseId', 'CaseId', 'caseUuid', 'CaseUuid', 'caseGuid', 'CaseGuid',
         'id', 'Id', 'uuid', 'Uuid', 'guid', 'Guid',
       ]);
       if (fromKey && UUID_RE.test(String(fromKey))) {
-        return String(fromKey).match(UUID_RE)[0];
+        return { uuid: String(fromKey).match(UUID_RE)[0], searchItem: firstItem };
       }
       const deep = findUuid(firstItem);
-      if (deep) return deep;
+      if (deep) return { uuid: deep, searchItem: firstItem };
     }
 
     const anyUuid = findUuid(searchResp);
-    if (anyUuid) return anyUuid;
+    if (anyUuid) return { uuid: anyUuid, searchItem: null };
 
     throw new Error('not_found');
   }
@@ -192,59 +213,81 @@
     };
 
     try {
-      const uuid = await resolveCaseUuid(msg.caseNumber);
+      const { uuid, searchItem } = await resolveCaseUuid(msg.caseNumber);
       LOG('resolved UUID', uuid);
 
-      const [detail, inCharge, shareUrl] = await Promise.all([
+      const [detailResp, inChargeResp, shareUrlResp] = await Promise.all([
         gmGet(API_BASE + '/api/Case/Info/Detail/' + uuid).catch((e) => ({ __error: e })),
         gmGet(API_BASE + '/api/Case/Info/InCharge/' + uuid).catch((e) => ({ __error: e })),
         gmGet(API_BASE + '/api/Case/Info/ShareUrl/' + uuid).catch((e) => ({ __error: e })),
       ]);
 
-      LOG('detail', detail);
-      LOG('inCharge', inCharge);
-      LOG('shareUrl', shareUrl);
+      LOG('detail', detailResp);
+      LOG('inCharge', inChargeResp);
+      LOG('shareUrl', shareUrlResp);
 
-      for (const resp of [detail, inCharge, shareUrl]) {
+      for (const resp of [detailResp, inChargeResp, shareUrlResp]) {
         if (resp && resp.__error && isAuthError(resp.__error)) {
           return reply({ ok: false, error: 'auth_expired', message: '請先在另一個分頁登入 i智慧' });
         }
       }
 
-      const detailOk = detail && !detail.__error;
-      const inChargeOk = inCharge && !inCharge.__error;
-      const shareOk = shareUrl && !shareUrl.__error;
+      const detail   = (detailResp   && !detailResp.__error)   ? unwrap(detailResp)   : null;
+      const inCharge = (inChargeResp && !inChargeResp.__error) ? unwrap(inChargeResp) : null;
+      const share    = (shareUrlResp && !shareUrlResp.__error) ? unwrap(shareUrlResp) : null;
 
-      const communityName = detailOk ? pickDeep(detail, [
-        'communityName', 'CommunityName', 'societyName', 'SocietyName',
-        'propertyName', 'PropertyName', 'caseName', 'CaseName',
-        '社區名稱', '社區',
-      ]) : null;
+      const staff = inCharge ? (inCharge.mStaff || inCharge.MStaff || inCharge.dStaff || inCharge.DStaff) : null;
 
-      const floorRaw = detailOk ? pickDeep(detail, [
-        'floorDisplay', 'FloorDisplay', 'mainFloorText', 'MainFloorText',
-        'floor', 'Floor', 'mainFloor', 'MainFloor',
-        'floorText', 'FloorText', 'floorStr', 'FloorStr',
-        '樓層', '主要樓層',
-      ]) : null;
+      const communityName =
+        pickDeep(detail, [
+          'buildingName', 'BuildingName',
+          'communityName', 'CommunityName', 'societyName', 'SocietyName',
+          'propertyName', 'PropertyName', 'caseName', 'CaseName',
+          '社區名稱', '社區',
+        ])
+        || pickDeep(searchItem, [
+          'buildingName', 'BuildingName',
+          'communityName', 'CommunityName', 'societyName', 'SocietyName',
+          'propertyName', 'PropertyName', 'caseName', 'CaseName',
+        ]);
 
-      const agentName = inChargeOk ? pickDeep(inCharge, [
+      const floorText =
+        buildFloorText(detail)
+        || pickDeep(detail, [
+          'floorDisplay', 'FloorDisplay', 'mainFloorText', 'MainFloorText',
+          'floor', 'Floor', 'mainFloor', 'MainFloor',
+          'floorText', 'FloorText', 'floorStr', 'FloorStr',
+          '樓層', '主要樓層',
+        ])
+        || buildFloorText(searchItem)
+        || '';
+
+      const agentName = pickDeep(staff, [
+        'empName', 'EmpName',
         'agentName', 'AgentName', 'name', 'Name', 'inChargeName', 'InChargeName',
         '姓名', '承辦人',
-      ]) : null;
+      ]);
 
-      const agentPhoneRaw = inChargeOk ? pickDeep(inCharge, [
+      const agentPhoneRaw = pickDeep(staff, [
         'mobile', 'Mobile', 'cellphone', 'Cellphone', 'cellPhone', 'CellPhone',
         'phone', 'Phone', 'agentPhone', 'AgentPhone', 'contactPhone', 'ContactPhone',
         '手機', '電話', '行動電話',
-      ]) : null;
+      ]);
 
-      const shareUrlValue = shareOk ? pickDeep(shareUrl, [
-        'shortUrl', 'ShortUrl', 'shareUrl', 'ShareUrl',
+      const shareUrlValue = pickDeep(share, [
+        'shortenUrl', 'ShortenUrl', 'shortUrl', 'ShortUrl',
+        'guidUrl', 'GuidUrl', 'shareUrl', 'ShareUrl',
         'url', 'Url', 'URL',
-      ]) : null;
+      ]);
 
-      const anyFound = communityName || floorRaw || agentName || agentPhoneRaw || shareUrlValue;
+      const missing = [];
+      if (!communityName)   missing.push('社區');
+      if (!floorText)       missing.push('樓層');
+      if (!agentName)       missing.push('同事名');
+      if (!agentPhoneRaw)   missing.push('同事手機');
+      if (!shareUrlValue)   missing.push('永慶連結');
+
+      const anyFound = communityName || floorText || agentName || agentPhoneRaw || shareUrlValue;
       if (!anyFound) {
         return reply({
           ok: false,
@@ -258,11 +301,12 @@
         data: {
           caseUuid: uuid,
           communityName: communityName ? String(communityName) : '',
-          floor: parseFloor(floorRaw),
+          floor: floorText ? (floorText.includes('樓') ? floorText : parseFloor(floorText)) : '',
           shareUrl: shareUrlValue ? String(shareUrlValue) : '',
           agentName: agentName ? String(agentName) : '',
           agentPhone: agentPhoneRaw ? String(agentPhoneRaw).replace(/[\s\-().]/g, '') : '',
         },
+        missing: missing.length ? missing : undefined,
       });
     } catch (e) {
       console.error('[CRM×i智慧] lookup failed', e);
