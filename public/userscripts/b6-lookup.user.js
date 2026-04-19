@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.4.2
+// @version      0.4.3
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）
 // @author       coprime5231
 // @match        https://coprime5231-crm.zeabur.app/marketing*
@@ -19,7 +19,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.4.2';
+  const VERSION = '0.4.3';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -146,29 +146,8 @@
     return '';
   }
 
-  function findUuid(obj) {
-    if (obj == null) return null;
-    if (typeof obj === 'string') {
-      const m = obj.match(UUID_RE);
-      return m ? m[0] : null;
-    }
-    if (Array.isArray(obj)) {
-      for (const item of obj) {
-        const u = findUuid(item);
-        if (u) return u;
-      }
-      return null;
-    }
-    if (typeof obj === 'object') {
-      for (const v of Object.values(obj)) {
-        const u = findUuid(v);
-        if (u) return u;
-      }
-    }
-    return null;
-  }
-
   // 把物件裡所有 UUID 連 path 一起列出來，方便 debug 哪個 key 才是真正的 caseId
+  // (只用於 debug log，取 UUID 走 pickShallow — 禁止 deep scan，見 G16)
   function findAllUuids(obj, path = '', out = []) {
     if (obj == null) return out;
     if (typeof obj === 'string') {
@@ -218,23 +197,20 @@
       console.log('[B6 firstItem UUIDs]', findAllUuids(firstItem));
     }
 
-    if (firstItem) {
-      const fromKey = pickShallow(firstItem, [
-        'caseKey', 'CaseKey',
-        'caseId', 'CaseId', 'caseUuid', 'CaseUuid', 'caseGuid', 'CaseGuid',
-        'id', 'Id', 'uuid', 'Uuid', 'guid', 'Guid',
-      ]);
-      if (fromKey && UUID_RE.test(String(fromKey))) {
-        return { uuid: String(fromKey).match(UUID_RE)[0], searchItem: firstItem };
-      }
-      const deep = findUuid(firstItem);
-      if (deep) return { uuid: deep, searchItem: firstItem };
+
+    // G16: 只從 data.items[0] 的 caseKey 系列 key 取 UUID；
+    // 禁止 deep scan / envelope fallback（會撈到響應 metadata 的 `id`，那不是 caseId）。
+    if (!firstItem) throw new Error('case_not_found');
+
+    const fromKey = pickShallow(firstItem, [
+      'caseKey', 'CaseKey',
+      'caseId', 'CaseId', 'caseUuid', 'CaseUuid', 'caseGuid', 'CaseGuid',
+    ]);
+    if (fromKey && UUID_RE.test(String(fromKey))) {
+      return { uuid: String(fromKey).match(UUID_RE)[0], searchItem: firstItem };
     }
 
-    const anyUuid = findUuid(searchResp);
-    if (anyUuid) return { uuid: anyUuid, searchItem: null };
-
-    throw new Error('not_found');
+    throw new Error('case_not_found');
   }
 
   async function handleLookup(msg) {
@@ -368,8 +344,8 @@
       if (e.message === 'empty_input' || e.message === 'invalid_input') {
         return reply({ ok: false, error: 'invalid_input', message: '請輸入 i智慧 物件編號或 detail URL' });
       }
-      if (e.message === 'not_found') {
-        return reply({ ok: false, error: 'not_found', message: '找不到這個編號，請檢查' });
+      if (e.message === 'not_found' || e.message === 'case_not_found') {
+        return reply({ ok: false, error: 'case_not_found', message: '找不到這個編號，請檢查' });
       }
       return reply({ ok: false, error: 'network_error', message: e.message || '網路錯誤' });
     }
