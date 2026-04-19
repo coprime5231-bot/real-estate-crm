@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.4.1
+// @version      0.4.2
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）
 // @author       coprime5231
 // @match        https://coprime5231-crm.zeabur.app/marketing*
@@ -19,7 +19,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.4.1';
+  const VERSION = '0.4.2';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -168,6 +168,26 @@
     return null;
   }
 
+  // 把物件裡所有 UUID 連 path 一起列出來，方便 debug 哪個 key 才是真正的 caseId
+  function findAllUuids(obj, path = '', out = []) {
+    if (obj == null) return out;
+    if (typeof obj === 'string') {
+      const m = obj.match(UUID_RE);
+      if (m) out.push({ path: path || '(root)', uuid: m[0] });
+      return out;
+    }
+    if (Array.isArray(obj)) {
+      obj.forEach((item, i) => findAllUuids(item, `${path}[${i}]`, out));
+      return out;
+    }
+    if (typeof obj === 'object') {
+      for (const [k, v] of Object.entries(obj)) {
+        findAllUuids(v, path ? `${path}.${k}` : k, out);
+      }
+    }
+    return out;
+  }
+
   async function resolveCaseUuid(input) {
     const trimmed = String(input || '').trim();
     if (!trimmed) throw new Error('empty_input');
@@ -189,6 +209,14 @@
       || (Array.isArray(searchData) ? searchData : null)
       || (Array.isArray(searchResp) ? searchResp : null);
     const firstItem = Array.isArray(items) && items.length > 0 ? items[0] : null;
+
+    console.log('[B6 search data]', searchData);
+    console.log('[B6 search items count]', Array.isArray(items) ? items.length : 'not-array');
+    if (firstItem) {
+      console.log('[B6 firstItem keys]', Object.keys(firstItem));
+      console.log('[B6 firstItem]', firstItem);
+      console.log('[B6 firstItem UUIDs]', findAllUuids(firstItem));
+    }
 
     if (firstItem) {
       const fromKey = pickShallow(firstItem, [
