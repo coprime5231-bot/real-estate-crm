@@ -32,7 +32,7 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
   const [editingNote, setEditingNote] = useState(false)
   const [noteDraft, setNoteDraft] = useState(viewing.note || '')
   const [savingNote, setSavingNote] = useState(false)
-  const noteRef = useRef<HTMLTextAreaElement>(null)
+  const noteRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null)
 
   useEffect(() => {
     setNoteDraft(viewing.note || '')
@@ -111,16 +111,44 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
     const md = formatMonthDay(viewing.datetime)
     const baseTitle = md ? `${md}  ${titleText}` : titleText
     const noteText = viewing.note?.trim() || ''
-    const collapsedTitle = noteText ? `${baseTitle} · ${noteText}` : baseTitle
     return (
-      <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg px-3 py-1.5 flex items-start gap-2 opacity-60 hover:opacity-80 transition-opacity">
-        <div className="flex-1 min-w-0 text-sm text-slate-500 whitespace-pre-wrap break-words">
-          {collapsedTitle}
+      <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg px-3 py-1.5 flex items-center gap-2 opacity-60 hover:opacity-80 transition-opacity">
+        <div className="flex-1 min-w-0 text-sm text-slate-500 flex items-center gap-1 flex-wrap">
+          <span className="shrink-0">{baseTitle}</span>
+          {editingNote ? (
+            <input
+              ref={noteRef as React.RefObject<HTMLInputElement>}
+              type="text"
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              onBlur={handleSaveNote}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  e.currentTarget.blur()
+                } else if (e.key === 'Escape') {
+                  setNoteDraft(viewing.note || '')
+                  setEditingNote(false)
+                }
+              }}
+              disabled={savingNote}
+              placeholder="備註..."
+              className="flex-1 min-w-[80px] bg-slate-900 border border-slate-600 rounded px-1.5 py-0 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+            />
+          ) : (
+            <button
+              onClick={() => setEditingNote(true)}
+              className="flex-1 min-w-0 text-left hover:text-slate-300 hover:bg-slate-700/30 rounded px-1 truncate"
+              title="點擊編輯備註"
+            >
+              {noteText ? `· ${noteText}` : <span className="text-slate-600">+ 備註</span>}
+            </button>
+          )}
         </div>
         <button
           onClick={() => handleToggle('liked')}
           disabled={toggling !== null}
-          className="text-sm hover:scale-110 transition-transform"
+          className="text-sm hover:scale-110 transition-transform shrink-0"
           title="喜歡"
         >
           🟣
@@ -128,7 +156,7 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
         <button
           onClick={() => handleToggle('disliked')}
           disabled={toggling !== null}
-          className="text-sm hover:scale-110 transition-transform"
+          className="text-sm hover:scale-110 transition-transform shrink-0"
           title="取消不喜歡"
         >
           ⚫
@@ -149,17 +177,20 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-slate-400 shrink-0">{formatMonthDay(viewing.datetime)}</span>
-            <span className="text-sm text-white font-medium truncate">·&nbsp;{titleText}</span>
-            {communityUrl && (
+            <span className="text-sm text-slate-400 shrink-0">·</span>
+            {communityUrl ? (
               <a
                 href={communityUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sky-400 hover:text-sky-300 shrink-0"
+                className="text-sm text-purple-300 hover:underline font-medium inline-flex items-center gap-1 truncate"
                 title="社區資料"
               >
-                <ExternalLink size={12} />
+                {titleText}
+                <ExternalLink size={12} className="shrink-0" />
               </a>
+            ) : (
+              <span className="text-sm text-white font-medium truncate">{titleText}</span>
             )}
           </div>
           <div className="text-xs text-slate-400 mt-1">
@@ -173,7 +204,7 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
       <div className="mt-2">
         {editingNote ? (
           <textarea
-            ref={noteRef}
+            ref={noteRef as React.RefObject<HTMLTextAreaElement>}
             value={noteDraft}
             onChange={(e) => setNoteDraft(e.target.value)}
             onBlur={handleSaveNote}
