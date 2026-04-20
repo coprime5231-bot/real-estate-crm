@@ -112,3 +112,12 @@ export interface Viewing {
   opinion: ViewingOpinion
   created_at: string
 }
+
+export interface Conversation {
+  id: number
+  notion_buyer_id: string
+  date: string
+  content: string
+  created_at: string
+  updated_at: string
+}

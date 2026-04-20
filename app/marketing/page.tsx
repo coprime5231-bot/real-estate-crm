@@ -208,7 +208,8 @@ export default function MarketingPage() {
   const [promptFollowUpDate, setPromptFollowUpDate] = useState('')
   const [promptFollowUpTime, setPromptFollowUpTime] = useState('')
 
-  const progressInputRef = useRef<HTMLInputElement>(null)
+  const progressInputRef = useRef<HTMLTextAreaElement>(null)
+  const [conversationModeOn, setConversationModeOn] = useState(true)
 
   // ===================== 資料載入 =====================
 
@@ -629,36 +630,28 @@ export default function MarketingPage() {
     }
   }
 
-  // D. 快速記錄（洽談/面談）或一般進度送出
+  // D. 洽談快速記錄（雙寫 PG + Notion，自動 +3 天跟進）
   const handleQuickLogOrProgress = async () => {
-    if (!newProgressText.trim() || !selectedClientId) return
-
-    // 偵測是否為快速記錄（前綴含 📞 洽談 或 🤝 面談）
-    const quickLogMatch = newProgressText.match(/^\[.*?(📞\s*洽談|🤝\s*面談)\]\s*/)
-    if (!quickLogMatch) {
-      // 不是快速記錄 → 走原本的進度流程（含跟進提示）
-      return handleAddProgress()
-    }
-
-    const type = quickLogMatch[1].includes('洽談') ? '洽談' : '面談'
-    const content = newProgressText.slice(quickLogMatch[0].length).trim()
-    if (!content) {
-      toast.error('請在前綴後面補充內容')
-      return
-    }
+    const content = newProgressText.trim()
+    if (!content || !selectedClientId) return
 
     setSubmitting('progress')
     try {
       const res = await fetch(`/api/clients/${selectedClientId}/quick-log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, content }),
+        body: JSON.stringify({ content }),
       })
       if (!res.ok) throw new Error('API error')
       const data = await res.json()
 
-      // 更新之前進度
-      setClientBlocks((prev) => [{ id: data.blockId, text: data.text, createdTime: new Date().toISOString() }, ...prev])
+      // 更新之前進度（只在 Notion append 成功時 prepend）
+      if (data.blockId && data.text) {
+        setClientBlocks((prev) => [
+          { id: data.blockId, text: data.text, createdTime: new Date().toISOString() },
+          ...prev,
+        ])
+      }
       setNewProgressText('')
 
       // 更新左側卡片跟進日
@@ -673,8 +666,11 @@ export default function MarketingPage() {
       if (data.warning) {
         toast.warning(data.warning)
       }
+
+      // 送出後重新 focus 方便連續輸入
+      setTimeout(() => progressInputRef.current?.focus(), 0)
     } catch {
-      toast.error('快速記錄失敗')
+      toast.error('送出失敗，請重試')
     } finally {
       setSubmitting(null)
     }
@@ -1693,45 +1689,38 @@ export default function MarketingPage() {
                     {/* ④ 目前進度 + D. 快速記錄 + C. 自動設跟進提示 */}
                     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                       <h3 className="text-sm font-semibold text-indigo-400 mb-3">目前進度</h3>
-                      {/* D. 快速記錄按鈕 */}
+                      {/* D. 洽談模式切換按鈕（純 UX 提示：送出時固定記成洽談） */}
                       <div className="flex gap-2 mb-2">
                         <button
-                          onClick={() => {
-                            const now = new Date()
-                            const prefix = `[${now.getMonth() + 1}/${now.getDate()} 📞 洽談] `
-                            setNewProgressText(prefix)
-                            progressInputRef.current?.focus()
-                          }}
-                          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded transition-colors"
+                          onClick={() => setConversationModeOn((v) => !v)}
+                          className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                            conversationModeOn
+                              ? 'bg-purple-600 ring-2 ring-purple-400 text-white'
+                              : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                          }`}
                         >
                           📞 洽談
                         </button>
-                        <button
-                          onClick={() => {
-                            const now = new Date()
-                            const prefix = `[${now.getMonth() + 1}/${now.getDate()} 🤝 面談] `
-                            setNewProgressText(prefix)
-                            progressInputRef.current?.focus()
-                          }}
-                          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded transition-colors"
-                        >
-                          🤝 面談
-                        </button>
                       </div>
-                      <div className="flex gap-2">
-                        <input
+                      <div className="flex flex-col gap-2">
+                        <textarea
                           ref={progressInputRef}
-                          type="text"
-                          placeholder="輸入今天的進度..."
+                          rows={4}
+                          placeholder="輸入洽談內容（Enter 換行、Ctrl/Cmd+Enter 送出）"
                           value={newProgressText}
                           onChange={(e) => setNewProgressText(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleQuickLogOrProgress()}
-                          className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                              e.preventDefault()
+                              handleQuickLogOrProgress()
+                            }
+                          }}
+                          className="w-full min-h-[96px] max-h-48 resize-none bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                         />
                         <button
                           onClick={handleQuickLogOrProgress}
                           disabled={submitting === 'progress' || !newProgressText.trim()}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm rounded transition-colors"
+                          className="self-end px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm rounded transition-colors"
                         >
                           {submitting === 'progress' ? '送出中...' : '送出'}
                         </button>
