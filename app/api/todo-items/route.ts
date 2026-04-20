@@ -43,13 +43,13 @@ export async function GET() {
       return NextResponse.json({ error: '未配置 NOTION_TODO_DB_ID' }, { status: 400 })
     }
 
-    // 查詢未完成的待辦（待辦 checkbox = true 表示待辦中，false 或無 = 完成）
-    // 根據現有邏輯，待辦 = true 代表「是待辦」，在 CRM 端我們顯示這些
+    // Notion 「待辦」checkbox 語意：打勾 (true) = done、空白 (false) = pending
+    // Dashboard 只顯示未完成 → filter 待辦=false
     const response = await notion.databases.query({
       database_id: TODO_DB_ID,
       filter: {
         property: '待辦',
-        checkbox: { equals: true },
+        checkbox: { equals: false },
       },
     })
 
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     const titleKey = await getTitlePropName()
     const properties: any = {
       [titleKey]: { title: [{ text: { content: title } }] },
-      '待辦': { checkbox: true },
+      '待辦': { checkbox: false },
     }
 
     // 日期欄位（預設今天）

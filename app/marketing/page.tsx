@@ -430,7 +430,7 @@ export default function MarketingPage() {
       const res = await fetch(`/api/clients/todos/${todoId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ todoFlag: false }),
+        body: JSON.stringify({ todoFlag: true }),
       })
       if (!res.ok) throw new Error(`PATCH ${res.status}`)
     } catch (err) {
@@ -464,7 +464,7 @@ export default function MarketingPage() {
               const res = await fetch(`/api/clients/todos/${todoId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ todoFlag: true }),
+                body: JSON.stringify({ todoFlag: false }),
               })
               if (!res.ok) throw new Error(`PATCH ${res.status}`)
               fetchDashboard()
@@ -605,7 +605,8 @@ export default function MarketingPage() {
       setClientTodos((prev) =>
         prev.map((t) => (t.id === todoId ? { ...t, todoFlag: !currentFlag } : t))
       )
-      if (currentFlag) {
+      // currentFlag=false 是 pending、翻過來變 done → 從 dashboard pending 清單移除
+      if (!currentFlag) {
         setTodoItems((prev) => prev.filter((t) => t.id !== todoId))
       }
     } catch (err) {
@@ -1648,12 +1649,12 @@ export default function MarketingPage() {
                                   onClick={() => handleToggleTodo(todo.id, todo.todoFlag)}
                                   className="text-slate-500 hover:text-green-400 transition-colors shrink-0"
                                 >
-                                  {todo.todoFlag ? <Square size={14} /> : <CheckSquare size={14} className="text-green-500" />}
+                                  {todo.todoFlag ? <CheckSquare size={14} className="text-green-500" /> : <Square size={14} />}
                                 </button>
-                                <span className={todo.todoFlag ? style.text : 'text-slate-500 line-through'}>
+                                <span className={todo.todoFlag ? 'text-slate-500 line-through' : style.text}>
                                   {todo.title}
                                 </span>
-                                {todo.todoFlag && style.badge && (
+                                {!todo.todoFlag && style.badge && (
                                   <span className="text-[10px] bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded shrink-0">
                                     {style.badge}
                                   </span>

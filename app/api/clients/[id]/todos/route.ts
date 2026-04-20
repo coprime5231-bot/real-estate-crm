@@ -41,7 +41,8 @@ export async function GET(
           todoFlag: p['待辦']?.checkbox ?? false,
         }
       })
-      .sort((a: any, b: any) => Number(b.todoFlag) - Number(a.todoFlag))
+      // todoFlag=true 是 done（排後面），false 是 pending（排前面）
+      .sort((a: any, b: any) => Number(a.todoFlag) - Number(b.todoFlag))
     return NextResponse.json(todos)
   } catch (error: any) {
     console.error('Failed to fetch todos:', error)
@@ -65,7 +66,7 @@ export async function POST(
     const properties: any = {
       [titleProp]: { title: [{ text: { content: title } }] },
       '🤑 買方': { relation: [{ id: params.id }] },
-      '待辦': { checkbox: true },
+      '待辦': { checkbox: false },
     }
     if (body.priority) {
       properties['優先度'] = { select: { name: body.priority } }
@@ -79,7 +80,7 @@ export async function POST(
       title,
       status: null,
       priority: body.priority || null,
-      todoFlag: true,
+      todoFlag: false,
     })
   } catch (error: any) {
     console.error('Failed to create todo:', error)
