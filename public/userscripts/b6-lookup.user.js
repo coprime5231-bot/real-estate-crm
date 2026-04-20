@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.6.0
+// @version      0.7.0
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）；列印頁若帶 ?autoPrint=1 自動觸發列印；回傳 payload 加 ycutCaseIdx 供 CRM 組列印 URL
+// v0.7.0 — caseIdx 改用 value-based scan（不再猜 key 名稱）
 // @author       coprime5231
 // @match        https://coprime5231-crm.zeabur.app/marketing*
 // @match        http://localhost:3000/marketing*
@@ -20,7 +21,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.6.0';
+  const VERSION = '0.7.0';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -155,6 +156,27 @@
       }
     }
     return null;
+  }
+
+  // 從 searchItem + detail 掃所有頂層欄位，凡 6~9 位純數字且不等於輸入對外編號
+  // 的值都算候選；回傳第一個候選 + 完整候選清單（供排錯）。
+  function findInternalCaseIdx(searchItem, detail, inputCaseNumber) {
+    const merged = Object.assign({}, detail || {}, searchItem || {});
+    const candidates = [];
+    const inputTrimmed = String(inputCaseNumber || '').trim();
+    for (const [k, v] of Object.entries(merged)) {
+      if (v == null) continue;
+      if (typeof v === 'object') continue;
+      const s = String(v).trim();
+      if (!/^\d{6,9}$/.test(s)) continue;
+      if (s === inputTrimmed) continue;
+      candidates.push({ key: k, val: s });
+    }
+    LOG('ycutCaseIdx candidates', candidates);
+    return {
+      value: candidates.length ? candidates[0].val : null,
+      candidates,
+    };
   }
 
   function parseFloor(text) {
@@ -341,20 +363,10 @@
       const addressValue = addressComplete ? addressStr : '';
 
       // 列印頁 URL 用的 i智慧 內部 caseIdx（不同於對外物件編號、也不同於 caseKey UUID）
-      // 從 search firstItem 取；只收非 UUID 的短字串（UUID 是 caseKey，已單獨拿去打 detail）
-      const ycutCaseIdxRaw = pickShallow(searchItem, [
-        'caseId', 'CaseId',
-        'caseIdx', 'CaseIdx',
-        'caseIndex', 'CaseIndex',
-        'caseSeq', 'CaseSeq',
-        'seqNo', 'SeqNo',
-        'sid', 'SID',
-      ]);
-      const ycutCaseIdx =
-        ycutCaseIdxRaw != null && ycutCaseIdxRaw !== '' && !UUID_RE.test(String(ycutCaseIdxRaw))
-          ? String(ycutCaseIdxRaw)
-          : null;
-      LOG('ycutCaseIdx', ycutCaseIdx, 'from raw', ycutCaseIdxRaw);
+      // v0.7.0：改用 value-based scan（猜 key 名稱行不通，12 候選全 miss）
+      const { value: ycutCaseIdx, candidates: ycutCaseIdxCandidates } =
+        findInternalCaseIdx(searchItem, detail, msg.caseNumber);
+      LOG('ycutCaseIdx', ycutCaseIdx, 'from', ycutCaseIdxCandidates.length, 'candidates');
 
       const missing = [];
       if (!communityName)   missing.push('社區');
@@ -377,6 +389,7 @@
         data: {
           caseUuid: uuid,
           ycutCaseIdx,
+          ycutCaseIdxCandidates,
           communityName: communityName ? String(communityName) : '',
           floor: floorText ? (floorText.includes('樓') ? floorText : parseFloor(floorText)) : '',
           shareUrl: shareUrlValue ? String(shareUrlValue) : '',
