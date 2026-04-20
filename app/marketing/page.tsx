@@ -20,6 +20,7 @@ import {
   Zap,
   Clock,
   Eye,
+  Printer,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -1878,12 +1879,33 @@ export default function MarketingPage() {
               </div>
 
               {/* 1. 日期時間 */}
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">日期時間 <span className="text-slate-500 text-xs">(30 分鐘事件)</span></label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={viewingDate}
+              {(() => {
+                const printCaseValid = /^\d{7}$/.test(ismartLookupInput.trim())
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm text-slate-400">日期時間 <span className="text-slate-500 text-xs">(30 分鐘事件)</span></label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const caseNo = ismartLookupInput.trim()
+                          if (!/^\d{7}$/.test(caseNo)) return
+                          const empNo = process.env.NEXT_PUBLIC_YCUT_EMP_NO || 'C30419'
+                          const url = `https://is.ycut.com.tw/case/report/market/redirect?caseIdx=${encodeURIComponent(caseNo)}&empNo=${encodeURIComponent(empNo)}`
+                          window.open(url, '_blank', 'noopener,noreferrer')
+                        }}
+                        disabled={!printCaseValid}
+                        title={printCaseValid ? '在新分頁打開 i智慧 成交行情列印頁' : '請先在上方輸入 7 位數 i智慧 物件編號'}
+                        className="flex items-center gap-1 px-2 py-0.5 border border-slate-600 hover:border-sky-500 hover:text-sky-300 disabled:border-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-300 text-xs rounded transition-colors"
+                      >
+                        <Printer size={12} />
+                        列印
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={viewingDate}
                     onChange={(e) => setViewingDate(e.target.value)}
                     className="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
                   />
@@ -1916,6 +1938,8 @@ export default function MarketingPage() {
                   </select>
                 </div>
               </div>
+                  )
+                })()}
 
               {/* 3. 地點 */}
               <div>
