@@ -586,7 +586,6 @@ export default function MarketingPage() {
 
         setNewTodoDate('')
         setNewTodoTime('')
-        fetchDashboard()
       }
     } finally {
       setSubmitting(null)
