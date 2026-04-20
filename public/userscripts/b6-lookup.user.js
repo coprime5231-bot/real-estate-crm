@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.4.3
-// @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）
+// @version      0.5.0
+// @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）；列印頁若帶 ?autoPrint=1 自動觸發列印
 // @author       coprime5231
 // @match        https://coprime5231-crm.zeabur.app/marketing*
 // @match        http://localhost:3000/marketing*
+// @match        https://is.ycut.com.tw/case/report/market/redirect*
 // @connect      is.ycut.com.tw
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
@@ -19,7 +20,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.4.3';
+  const VERSION = '0.5.0';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -27,6 +28,38 @@
     'websitename': 'IntegrationService_WS',
   };
   const LOG = (...args) => console.log('[CRM×i智慧]', ...args);
+
+  // ============ 列印頁自動觸發 ============
+  // CRM 列印按鈕打開新分頁時會附 ?autoPrint=1；列印頁 SPA 渲染完 .printBtn 後點一下
+  if (location.host === 'is.ycut.com.tw' &&
+      location.pathname === '/case/report/market/redirect' &&
+      new URLSearchParams(location.search).get('autoPrint') === '1') {
+    LOG('userscript loaded v' + VERSION + ' (autoPrint mode)');
+    LOG('autoPrint mode, waiting for .printBtn');
+    let tries = 0;
+    const MAX_TRIES = 150;
+    const DELAY_AFTER_FOUND = 1200;
+    const timer = setInterval(() => {
+      tries++;
+      const btn = Array.from(document.querySelectorAll('button.printBtn'))
+        .find((b) => (b.textContent || '').trim() === '列印');
+      if (btn) {
+        clearInterval(timer);
+        LOG('printBtn found after ' + tries + ' tries, firing window.print() in ' + DELAY_AFTER_FOUND + 'ms');
+        setTimeout(() => {
+          try {
+            btn.click();
+          } catch (e) {
+            pageWindow.print();
+          }
+        }, DELAY_AFTER_FOUND);
+      } else if (tries >= MAX_TRIES) {
+        clearInterval(timer);
+        LOG('printBtn not found after ' + tries + ' tries, giving up autoPrint');
+      }
+    }, 100);
+    return;
+  }
 
   function gmRequest(method, url, body) {
     return new Promise((resolve, reject) => {

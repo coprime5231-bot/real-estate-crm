@@ -1891,7 +1891,7 @@ export default function MarketingPage() {
                           const caseNo = ismartLookupInput.trim()
                           if (!/^\d{7}$/.test(caseNo)) return
                           const empNo = process.env.NEXT_PUBLIC_YCUT_EMP_NO || 'C30419'
-                          const url = `https://is.ycut.com.tw/case/report/market/redirect?caseIdx=${encodeURIComponent(caseNo)}&empNo=${encodeURIComponent(empNo)}`
+                          const url = `https://is.ycut.com.tw/case/report/market/redirect?caseIdx=${encodeURIComponent(caseNo)}&empNo=${encodeURIComponent(empNo)}&autoPrint=1`
                           window.open(url, '_blank', 'noopener,noreferrer')
                         }}
                         disabled={!printCaseValid}
