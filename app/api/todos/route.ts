@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         return {
           id: page.id,
           title: properties['名稱']?.title?.[0]?.plain_text || '未命名',
-          completed: properties['完成']?.checkbox || false,
+          completed: !(properties['待辦']?.checkbox ?? true),
           buyerId: properties['客戶']?.relation?.[0]?.id,
         }
       })

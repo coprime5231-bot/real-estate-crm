@@ -422,16 +422,19 @@ export default function MarketingPage() {
   }, [quickTodoText, quickTodoBound, quickTodoDate, quickTodoTime, selectedClientId, selectedClient])
 
   // === A3. 動畫版 toggle dashboard 待辦完成 ===
+  // 流程：checked → await PATCH → (ok) strikethrough/fading/remove + toast / (fail) rollback + 紅 toast
   const handleAnimatedToggleTodo = useCallback(async (todoId: string, title: string) => {
     setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'checked' }))
 
     try {
-      await fetch(`/api/clients/todos/${todoId}`, {
+      const res = await fetch(`/api/clients/todos/${todoId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ todoFlag: false }),
       })
-    } catch {
+      if (!res.ok) throw new Error(`PATCH ${res.status}`)
+    } catch (err) {
+      console.error('toggle todo failed:', err)
       setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'idle' }))
       toast.error('完成失敗，請重試')
       return
@@ -453,19 +456,21 @@ export default function MarketingPage() {
         return next
       })
 
-      toast.success(`已完成：${title.slice(0, 20)}`, {
+      toast.success(`✓ 已完成：${title.slice(0, 20)}`, {
         action: {
           label: '復原',
           onClick: async () => {
             try {
-              await fetch(`/api/clients/todos/${todoId}`, {
+              const res = await fetch(`/api/clients/todos/${todoId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ todoFlag: true }),
               })
+              if (!res.ok) throw new Error(`PATCH ${res.status}`)
               fetchDashboard()
               toast.success('已復原')
-            } catch {
+            } catch (err) {
+              console.error('undo todo failed:', err)
               toast.error('復原失敗')
             }
           },
@@ -591,11 +596,12 @@ export default function MarketingPage() {
   // 切換待辦完成
   const handleToggleTodo = async (todoId: string, currentFlag: boolean) => {
     try {
-      await fetch(`/api/clients/todos/${todoId}`, {
+      const res = await fetch(`/api/clients/todos/${todoId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ todoFlag: !currentFlag }),
       })
+      if (!res.ok) throw new Error(`PATCH ${res.status}`)
       setClientTodos((prev) =>
         prev.map((t) => (t.id === todoId ? { ...t, todoFlag: !currentFlag } : t))
       )
@@ -604,6 +610,7 @@ export default function MarketingPage() {
       }
     } catch (err) {
       console.error('Toggle todo error:', err)
+      toast.error('切換失敗，請重試')
     }
   }
 
