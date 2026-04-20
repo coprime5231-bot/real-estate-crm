@@ -592,28 +592,42 @@ export default function MarketingPage() {
     }
   }
 
-  // 切換待辦完成：pending→done 時從綠色+白色 pending 清單移除（跟白色區行為一致）
-  const handleToggleTodo = async (todoId: string, currentFlag: boolean) => {
+  // 動畫版 toggle 客戶待辦完成（對齊白色 handleAnimatedToggleTodo 時序：300/600/800 ms）
+  // 流程：checked → await PATCH → (ok) strikethrough → fading → remove / (fail) rollback（不 toast）
+  const handleAnimatedToggleClientTodo = useCallback(async (todoId: string) => {
+    setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'checked' }))
+
     try {
       const res = await fetch(`/api/clients/todos/${todoId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ todoFlag: !currentFlag }),
+        body: JSON.stringify({ todoFlag: true }),
       })
       if (!res.ok) throw new Error(`PATCH ${res.status}`)
-      if (!currentFlag) {
-        setClientTodos((prev) => prev.filter((t) => t.id !== todoId))
-        setTodoItems((prev) => prev.filter((t) => t.id !== todoId))
-      } else {
-        setClientTodos((prev) =>
-          prev.map((t) => (t.id === todoId ? { ...t, todoFlag: !currentFlag } : t))
-        )
-      }
     } catch (err) {
-      console.error('Toggle todo error:', err)
-      toast.error('切換失敗，請重試')
+      console.error('toggle client todo failed:', err)
+      setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'idle' }))
+      return
     }
-  }
+
+    setTimeout(() => {
+      setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'strikethrough' }))
+    }, 300)
+
+    setTimeout(() => {
+      setTodoAnimPhase((prev) => ({ ...prev, [todoId]: 'fading' }))
+    }, 600)
+
+    setTimeout(() => {
+      setClientTodos((prev) => prev.filter((t) => t.id !== todoId))
+      setTodoItems((prev) => prev.filter((t) => t.id !== todoId))
+      setTodoAnimPhase((prev) => {
+        const next = { ...prev }
+        delete next[todoId]
+        return next
+      })
+    }, 800)
+  }, [])
 
   // 新增進度 + C. 自動設跟進提示
   const handleAddProgress = async () => {
@@ -1643,18 +1657,35 @@ export default function MarketingPage() {
                         <div className="space-y-1.5 mt-3">
                           {clientTodos.map((todo) => {
                             const style = getTodoStyle(todo.title)
+                            const phase = todoAnimPhase[todo.id] || 'idle'
                             return (
-                              <div key={todo.id} className={`flex items-center gap-2 text-sm ${style.bg}`}>
+                              <div
+                                key={todo.id}
+                                className={`flex items-center gap-2 text-sm transition-all duration-200 ${style.bg} ${
+                                  phase === 'fading' ? 'opacity-0 max-h-0 overflow-hidden' : 'opacity-100 max-h-20'
+                                }`}
+                              >
                                 <button
-                                  onClick={() => handleToggleTodo(todo.id, todo.todoFlag)}
+                                  onClick={() => handleAnimatedToggleClientTodo(todo.id)}
+                                  disabled={phase !== 'idle'}
                                   className="text-slate-500 hover:text-green-400 transition-colors shrink-0"
                                 >
-                                  {todo.todoFlag ? <CheckSquare size={14} className="text-green-500" /> : <Square size={14} />}
+                                  {phase === 'idle' ? (
+                                    <Square size={14} />
+                                  ) : (
+                                    <CheckSquare size={14} className="text-green-500" />
+                                  )}
                                 </button>
-                                <span className={todo.todoFlag ? 'text-slate-500 line-through' : style.text}>
+                                <span
+                                  className={`transition-all duration-300 ${
+                                    phase === 'strikethrough' || phase === 'fading'
+                                      ? 'line-through text-slate-500'
+                                      : style.text
+                                  }`}
+                                >
                                   {todo.title}
                                 </span>
-                                {!todo.todoFlag && style.badge && (
+                                {phase === 'idle' && style.badge && (
                                   <span className="text-[10px] bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded shrink-0">
                                     {style.badge}
                                   </span>
