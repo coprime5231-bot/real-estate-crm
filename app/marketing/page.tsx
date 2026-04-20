@@ -251,7 +251,7 @@ export default function MarketingPage() {
     setLoadingDetail(true)
     try {
       const [todosRes, blocksRes] = await Promise.all([
-        fetch(`/api/clients/${clientId}/todos`),
+        fetch(`/api/clients/${clientId}/todos?待辦=false`),
         fetch(`/api/clients/${clientId}/blocks`),
       ])
       if (todosRes.ok) setClientTodos(await todosRes.json())
@@ -593,35 +593,25 @@ export default function MarketingPage() {
     }
   }
 
-  // 切換待辦完成
+  // 切換待辦完成：pending→done 時從綠色+白色 pending 清單移除（跟白色區行為一致）
   const handleToggleTodo = async (todoId: string, currentFlag: boolean) => {
-    console.log('[green-todo] onChange fired', {
-      todoId, currentFlag, targetFlag: !currentFlag, ts: Date.now(),
-    })
-    const body = { todoFlag: !currentFlag }
-    const url = `/api/clients/todos/${todoId}`
-    console.log('[green-todo] PATCH request', { url, method: 'PATCH', body })
     try {
-      const res = await fetch(url, {
+      const res = await fetch(`/api/clients/todos/${todoId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Source': 'green-todo',
-        },
-        body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ todoFlag: !currentFlag }),
       })
-      const respBody = await res.clone().json().catch(() => null)
-      console.log('[green-todo] PATCH response', { status: res.status, ok: res.ok, body: respBody })
       if (!res.ok) throw new Error(`PATCH ${res.status}`)
-      setClientTodos((prev) =>
-        prev.map((t) => (t.id === todoId ? { ...t, todoFlag: !currentFlag } : t))
-      )
-      // currentFlag=false 是 pending、翻過來變 done → 從 dashboard pending 清單移除
       if (!currentFlag) {
+        setClientTodos((prev) => prev.filter((t) => t.id !== todoId))
         setTodoItems((prev) => prev.filter((t) => t.id !== todoId))
+      } else {
+        setClientTodos((prev) =>
+          prev.map((t) => (t.id === todoId ? { ...t, todoFlag: !currentFlag } : t))
+        )
       }
     } catch (err) {
-      console.error('[green-todo] PATCH threw', err)
+      console.error('Toggle todo error:', err)
       toast.error('切換失敗，請重試')
     }
   }

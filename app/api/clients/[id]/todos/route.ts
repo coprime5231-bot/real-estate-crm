@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
 
+export const dynamic = 'force-dynamic'
+
 const titleNameCache: Record<string, string> = {}
 async function getTitlePropertyName(dbId: string): Promise<string> {
   if (titleNameCache[dbId]) return titleNameCache[dbId]
@@ -16,7 +18,7 @@ async function getTitlePropertyName(dbId: string): Promise<string> {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
@@ -25,9 +27,15 @@ export async function GET(
       return NextResponse.json({ error: '未配置 NOTION_TODO_DB_ID' }, { status: 400 })
     }
     const titleProp = await getTitlePropertyName(todoDbId)
+    // G22 語意：待辦=true = done、false = pending。?待辦=false → 只列 pending
+    const pendingOnly = request.nextUrl.searchParams.get('待辦') === 'false'
+    const buyerFilter = { property: '🤑 買方', relation: { contains: params.id } }
+    const filter: any = pendingOnly
+      ? { and: [buyerFilter, { property: '待辦', checkbox: { equals: false } }] }
+      : buyerFilter
     const response = await notion.databases.query({
       database_id: todoDbId,
-      filter: { property: '🤑 買方', relation: { contains: params.id } },
+      filter,
     })
     const todos = response.results
       .filter((page: any) => page.object === 'page')
