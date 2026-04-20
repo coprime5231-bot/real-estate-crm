@@ -169,6 +169,8 @@ export default function MarketingPage() {
   const [ismartLookupStatus, setIsmartLookupStatus] = useState<'idle' | 'loading' | 'ok' | 'error' | 'auth_expired'>('idle')
   const [ismartLookupMessage, setIsmartLookupMessage] = useState('')
   const [userscriptReady, setUserscriptReady] = useState(false)
+  // B6 列印：userscript 查到的 i智慧 內部 caseIdx（給列印頁 URL 用，跟對外編號不同）
+  const [ycutCaseIdx, setYcutCaseIdx] = useState<string | null>(null)
   const ismartRequestIdRef = useRef<string | null>(null)
   const ismartTimeoutRef = useRef<number | null>(null)
 
@@ -720,6 +722,7 @@ export default function MarketingPage() {
     setIsmartLookupInput('')
     setIsmartLookupStatus('idle')
     setIsmartLookupMessage('')
+    setYcutCaseIdx(null)
     ismartRequestIdRef.current = null
     if (ismartTimeoutRef.current) {
       window.clearTimeout(ismartTimeoutRef.current)
@@ -905,6 +908,7 @@ export default function MarketingPage() {
         applyIfEmpty(setViewingColleaguePhone, d.agentPhone)
         applyIfEmpty(setViewingLocation, d.address)
         // 備註欄不再自動填 x樓/共x樓（使用者要求留空自己寫）
+        setYcutCaseIdx(typeof d.ycutCaseIdx === 'string' && d.ycutCaseIdx ? d.ycutCaseIdx : null)
         setIsmartLookupStatus('ok')
         const bits = [d.communityName, d.agentName].filter(Boolean).join(' / ')
         const base = bits ? `✅ 已帶入（${bits}）` : '✅ 已帶入'
@@ -913,6 +917,7 @@ export default function MarketingPage() {
       } else {
         const error = (data.error || '') as string
         const message = (data.message || '查詢失敗') as string
+        setYcutCaseIdx(null)
         if (error === 'auth_expired') {
           setIsmartLookupStatus('auth_expired')
           setIsmartLookupMessage(message)
@@ -1830,7 +1835,10 @@ export default function MarketingPage() {
                   <input
                     type="text"
                     value={ismartLookupInput}
-                    onChange={(e) => setIsmartLookupInput(e.target.value)}
+                    onChange={(e) => {
+                      setIsmartLookupInput(e.target.value)
+                      setYcutCaseIdx(null)
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
@@ -1879,29 +1887,25 @@ export default function MarketingPage() {
               </div>
 
               {/* 1. 日期時間 */}
-              {(() => {
-                const printCaseValid = /^\d{7}$/.test(ismartLookupInput.trim())
-                return (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm text-slate-400">日期時間 <span className="text-slate-500 text-xs">(30 分鐘事件)</span></label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const caseNo = ismartLookupInput.trim()
-                          if (!/^\d{7}$/.test(caseNo)) return
-                          const empNo = process.env.NEXT_PUBLIC_YCUT_EMP_NO || 'C30419'
-                          const url = `https://is.ycut.com.tw/case/report/market/redirect?caseIdx=${encodeURIComponent(caseNo)}&empNo=${encodeURIComponent(empNo)}&autoPrint=1`
-                          window.open(url, '_blank', 'noopener,noreferrer')
-                        }}
-                        disabled={!printCaseValid}
-                        title={printCaseValid ? '在新分頁打開 i智慧 成交行情列印頁' : '請先在上方輸入 7 位數 i智慧 物件編號'}
-                        className="flex items-center gap-1 px-2 py-0.5 border border-slate-600 hover:border-sky-500 hover:text-sky-300 disabled:border-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-300 text-xs rounded transition-colors"
-                      >
-                        <Printer size={12} />
-                        列印
-                      </button>
-                    </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm text-slate-400">日期時間 <span className="text-slate-500 text-xs">(30 分鐘事件)</span></label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!ycutCaseIdx) return
+                      const empNo = process.env.NEXT_PUBLIC_YCUT_EMP_NO || 'C30419'
+                      const url = `https://is.ycut.com.tw/case/report/market/redirect?caseIdx=${encodeURIComponent(ycutCaseIdx)}&empNo=${encodeURIComponent(empNo)}&autoPrint=1`
+                      window.open(url, '_blank', 'noopener,noreferrer')
+                    }}
+                    disabled={!ycutCaseIdx}
+                    title={ycutCaseIdx ? '在新分頁打開 i智慧 成交行情列印頁' : '請先在上方輸入 i智慧 物件編號並按「🔍 帶入」'}
+                    className="flex items-center gap-1 px-2 py-0.5 border border-slate-600 hover:border-sky-500 hover:text-sky-300 disabled:border-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-300 text-xs rounded transition-colors"
+                  >
+                    <Printer size={12} />
+                    列印
+                  </button>
+                </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="date"
@@ -1938,8 +1942,6 @@ export default function MarketingPage() {
                   </select>
                 </div>
               </div>
-                  )
-                })()}
 
               {/* 3. 地點 */}
               <div>
