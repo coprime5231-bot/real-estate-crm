@@ -27,14 +27,21 @@ export async function PATCH(
         ? { status: { name: body.status } }
         : { status: null }
     }
+    const fullPayload = { page_id: params.todoId, properties: updateProperties }
     if (logPrefix) {
       console.log(logPrefix, 'calling notion.pages.update', {
-        page_id: params.todoId,
-        properties: JSON.stringify(updateProperties),
+        fullPayload: JSON.stringify(fullPayload),
       })
     }
-    await notion.pages.update({ page_id: params.todoId, properties: updateProperties })
-    if (logPrefix) console.log(logPrefix, 'notion.pages.update returned', { ok: true })
+    const updateResp: any = await notion.pages.update(fullPayload)
+    if (logPrefix) {
+      console.log(logPrefix, 'notion.pages.update returned', {
+        id: updateResp?.id,
+        archived: updateResp?.archived,
+        in_trash: updateResp?.in_trash,
+        todoCheckbox: updateResp?.properties?.['待辦']?.checkbox,
+      })
+    }
     return NextResponse.json({ success: true })
   } catch (error: any) {
     if (logPrefix) console.error(logPrefix, 'notion.pages.update threw', error)
