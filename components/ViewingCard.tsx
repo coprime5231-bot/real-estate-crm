@@ -109,12 +109,26 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
   // === disliked 態：縮小收合灰 ===
   if (opinion === 'disliked') {
     const md = formatMonthDay(viewing.datetime)
-    const baseTitle = md ? `${md}  ${titleText}` : titleText
     const noteText = viewing.note?.trim() || ''
     return (
       <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg px-3 py-1.5 flex items-center gap-2 opacity-60 hover:opacity-80 transition-opacity">
         <div className="flex-1 min-w-0 text-sm text-slate-500 flex items-center gap-1 flex-wrap">
-          <span className="shrink-0">{baseTitle}</span>
+          <span className="shrink-0">
+            {md && `${md}  `}
+            {communityUrl ? (
+              <a
+                href={communityUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-slate-300 hover:underline"
+                title="社區資料"
+              >
+                {titleText}
+              </a>
+            ) : (
+              titleText
+            )}
+          </span>
           {editingNote ? (
             <input
               ref={noteRef as React.RefObject<HTMLInputElement>}
