@@ -595,12 +595,23 @@ export default function MarketingPage() {
 
   // 切換待辦完成
   const handleToggleTodo = async (todoId: string, currentFlag: boolean) => {
+    console.log('[green-todo] onChange fired', {
+      todoId, currentFlag, targetFlag: !currentFlag, ts: Date.now(),
+    })
+    const body = { todoFlag: !currentFlag }
+    const url = `/api/clients/todos/${todoId}`
+    console.log('[green-todo] PATCH request', { url, method: 'PATCH', body })
     try {
-      const res = await fetch(`/api/clients/todos/${todoId}`, {
+      const res = await fetch(url, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ todoFlag: !currentFlag }),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Source': 'green-todo',
+        },
+        body: JSON.stringify(body),
       })
+      const respBody = await res.clone().json().catch(() => null)
+      console.log('[green-todo] PATCH response', { status: res.status, ok: res.ok, body: respBody })
       if (!res.ok) throw new Error(`PATCH ${res.status}`)
       setClientTodos((prev) =>
         prev.map((t) => (t.id === todoId ? { ...t, todoFlag: !currentFlag } : t))
@@ -610,7 +621,7 @@ export default function MarketingPage() {
         setTodoItems((prev) => prev.filter((t) => t.id !== todoId))
       }
     } catch (err) {
-      console.error('Toggle todo error:', err)
+      console.error('[green-todo] PATCH threw', err)
       toast.error('切換失敗，請重試')
     }
   }
