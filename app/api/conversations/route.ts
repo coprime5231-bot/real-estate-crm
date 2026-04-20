@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/mba/db'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * POST /api/conversations
  * 純 PG 新增洽談記錄（不寫 Notion）。quick-log 路由負責「洽談 + Notion body + 日期 +3」組合動作；

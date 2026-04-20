@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/mba/db'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/clients/[id]/viewings
  * 查該客戶所有帶看記錄，依規則排序：

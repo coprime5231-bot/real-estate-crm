@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/mba/db'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/communities?q=xxx&limit=10
  * Autocomplete 端點：回傳最近使用的社區 + 樂居連結。

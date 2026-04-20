@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion, { extractText, TodoData } from '@/lib/notion'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const todoDbId = process.env.NOTION_TODO_DB_ID

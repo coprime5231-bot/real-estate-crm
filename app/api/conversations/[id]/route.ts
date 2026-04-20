@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/mba/db'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * PATCH /api/conversations/[id]
  * 更新洽談內容（click-to-edit）。

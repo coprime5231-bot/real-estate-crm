@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/mba/db'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * PATCH /api/viewings/[id]
  * 可更新欄位：opinion ('liked'|'disliked'|null)、note

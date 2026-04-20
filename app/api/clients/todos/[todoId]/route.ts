@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
 
+export const dynamic = 'force-dynamic'
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { todoId: string } }
