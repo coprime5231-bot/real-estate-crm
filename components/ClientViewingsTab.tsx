@@ -2,27 +2,36 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Eye } from 'lucide-react'
-import type { Viewing } from '@/lib/types'
+import type { Viewing, Conversation } from '@/lib/types'
 import ViewingCard from './ViewingCard'
+import ConversationCard from './ConversationCard'
 
 interface Props {
   clientId: string
 }
 
-// 本地排序：🟣 → 預設 → ⚫，同組 datetime DESC。API 已這樣回，但切換 opinion 後需即時重排。
-function sortViewings(list: Viewing[]): Viewing[] {
-  const weight = (v: Viewing) => (v.opinion === 'liked' ? 0 : v.opinion === 'disliked' ? 2 : 1)
-  return [...list].sort((a, b) => {
-    const w = weight(a) - weight(b)
-    if (w !== 0) return w
-    const ta = new Date(a.datetime).getTime() || 0
-    const tb = new Date(b.datetime).getTime() || 0
+type ViewingCardItem = { type: 'viewing'; data: Viewing }
+type ConversationCardItem = { type: 'conversation'; data: Conversation }
+type CardItem = ViewingCardItem | ConversationCardItem
+
+// 排序規則：🟣 喜歡置頂 → 其他全部（洽談卡 + 預設帶看卡 + ⚫ 不喜歡）按日期新到舊混排
+function sortCards(cards: CardItem[]): CardItem[] {
+  return [...cards].sort((a, b) => {
+    const aLiked = a.type === 'viewing' && a.data.opinion === 'liked'
+    const bLiked = b.type === 'viewing' && b.data.opinion === 'liked'
+    if (aLiked !== bLiked) return aLiked ? -1 : 1
+
+    const aTime = a.type === 'viewing' ? a.data.datetime : a.data.date
+    const bTime = b.type === 'viewing' ? b.data.datetime : b.data.date
+    const ta = new Date(aTime).getTime() || 0
+    const tb = new Date(bTime).getTime() || 0
     return tb - ta
   })
 }
 
 export default function ClientViewingsTab({ clientId }: Props) {
   const [viewings, setViewings] = useState<Viewing[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,13 +39,19 @@ export default function ClientViewingsTab({ clientId }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/clients/${clientId}/viewings`)
-      if (!res.ok) throw new Error('fetch failed')
-      const data: Viewing[] = await res.json()
-      setViewings(sortViewings(data))
+      const [vRes, cRes] = await Promise.all([
+        fetch(`/api/clients/${clientId}/viewings`),
+        fetch(`/api/clients/${clientId}/conversations`),
+      ])
+      if (!vRes.ok) throw new Error('fetch viewings failed')
+      if (!cRes.ok) throw new Error('fetch conversations failed')
+      const vData: Viewing[] = await vRes.json()
+      const cData = await cRes.json()
+      setViewings(vData)
+      setConversations(cData.conversations || [])
     } catch (err: any) {
-      console.error('fetch viewings failed:', err)
-      setError('載入帶看記錄失敗')
+      console.error('fetch viewings/conversations failed:', err)
+      setError('載入記錄失敗')
     } finally {
       setLoading(false)
     }
@@ -46,18 +61,18 @@ export default function ClientViewingsTab({ clientId }: Props) {
     fetchData()
   }, [fetchData])
 
-  const handleUpdate = (id: number, patch: Partial<Viewing>) => {
-    setViewings((prev) => {
-      const next = prev.map((v) => (v.id === id ? { ...v, ...patch } : v))
-      // opinion 變動需要重排；備註變動不需要但重排也無副作用
-      return sortViewings(next)
-    })
+  const handleViewingUpdate = (id: number, patch: Partial<Viewing>) => {
+    setViewings((prev) => prev.map((v) => (v.id === id ? { ...v, ...patch } : v)))
+  }
+
+  const handleConversationUpdate = (id: number, patch: Partial<Conversation>) => {
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
   }
 
   if (loading) {
     return (
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 text-center text-sm text-slate-500">
-        載入帶看記錄...
+        載入記錄...
       </div>
     )
   }
@@ -70,11 +85,16 @@ export default function ClientViewingsTab({ clientId }: Props) {
     )
   }
 
-  if (viewings.length === 0) {
+  const cards: CardItem[] = sortCards([
+    ...viewings.map((v): ViewingCardItem => ({ type: 'viewing', data: v })),
+    ...conversations.map((c): ConversationCardItem => ({ type: 'conversation', data: c })),
+  ])
+
+  if (cards.length === 0) {
     return (
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-8 text-center">
         <Eye size={32} className="mx-auto mb-3 text-slate-600" />
-        <p className="text-sm text-slate-400">尚無帶看記錄</p>
+        <p className="text-sm text-slate-400">尚無記錄</p>
       </div>
     )
   }
@@ -82,15 +102,23 @@ export default function ClientViewingsTab({ clientId }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex items-center">
-        <span className="text-xs text-slate-500">共 {viewings.length} 筆</span>
+        <span className="text-xs text-slate-500">共 {cards.length} 筆（帶看 {viewings.length}、洽談 {conversations.length}）</span>
       </div>
-      {viewings.map((v) => (
-        <ViewingCard
-          key={v.id}
-          viewing={v}
-          onUpdate={(patch) => handleUpdate(v.id, patch)}
-        />
-      ))}
+      {cards.map((card) =>
+        card.type === 'viewing' ? (
+          <ViewingCard
+            key={`v-${card.data.id}`}
+            viewing={card.data}
+            onUpdate={(patch) => handleViewingUpdate(card.data.id, patch)}
+          />
+        ) : (
+          <ConversationCard
+            key={`c-${card.data.id}`}
+            conversation={card.data}
+            onUpdate={(patch) => handleConversationUpdate(card.data.id, patch)}
+          />
+        )
+      )}
     </div>
   )
 }
