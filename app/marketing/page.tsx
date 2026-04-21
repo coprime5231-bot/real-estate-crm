@@ -164,6 +164,8 @@ export default function MarketingPage() {
   const [viewingColleaguePhone, setViewingColleaguePhone] = useState('')
   const [viewingNote, setViewingNote] = useState('')
   const [creatingViewing, setCreatingViewing] = useState(false)
+  // B7: 社區名失焦 → 查 /api/search/leju 自動補樂居連結
+  const [lejuSearching, setLejuSearching] = useState(false)
   // B6: i智慧 物件編號 → 自動帶入
   const [ismartLookupInput, setIsmartLookupInput] = useState('')
   const [ismartLookupStatus, setIsmartLookupStatus] = useState<'idle' | 'loading' | 'ok' | 'error' | 'auth_expired'>('idle')
@@ -770,6 +772,26 @@ export default function MarketingPage() {
       setIsmartLookupMessage('⚠️ userscript 無回應，請確認 Tampermonkey 已啟用 + 已安裝 userscript')
     }, 15000) as unknown as number
   }
+
+  // B7: 社區名失焦 → 若樂居連結還沒值就去 /api/search/leju 自動補（不覆蓋使用者已填值）
+  const handleCommunityBlurFetchLeju = useCallback(async () => {
+    const name = viewingCommunityName.trim()
+    if (!name) return
+    if (viewingCommunityLejuUrl.trim()) return // 已有值（使用者手填或 autocomplete 帶入）就不動
+    setLejuSearching(true)
+    try {
+      const res = await fetch(`/api/search/leju?name=${encodeURIComponent(name)}`)
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.url && typeof data.url === 'string') {
+        // 中途使用者手動填了才回來，不覆蓋
+        setViewingCommunityLejuUrl((prev) => (prev.trim() ? prev : data.url))
+      }
+    } catch (err) {
+      console.error('leju search failed:', err)
+    } finally {
+      setLejuSearching(false)
+    }
+  }, [viewingCommunityName, viewingCommunityLejuUrl])
 
   // U2: 送出新增帶看
   const handleCreateViewing = async () => {
@@ -1995,6 +2017,7 @@ export default function MarketingPage() {
                     setViewingCommunityName(c.name)
                     if (c.leju_url) setViewingCommunityLejuUrl(c.leju_url)
                   }}
+                  onBlur={handleCommunityBlurFetchLeju}
                   placeholder="例如：太普"
                   inputClassName="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
@@ -2014,10 +2037,11 @@ export default function MarketingPage() {
                 />
               </div>
 
-              {/* 6. 樂居連結 */}
+              {/* 6. 樂居連結（B7: 社區名失焦後自動帶，使用者可改/清空） */}
               <div>
                 <label className="block text-sm text-slate-400 mb-1">
                   樂居連結 <span className="text-slate-500 text-xs">(選填)</span>
+                  {lejuSearching && <span className="ml-2 text-xs text-slate-500">搜尋中…</span>}
                 </label>
                 <input
                   type="url"
