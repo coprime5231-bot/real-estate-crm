@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.8.0
+// @version      0.9.0
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）；列印頁若帶 ?autoPrint=1 自動觸發列印；回傳 payload 加 ycutCaseIdx 供 CRM 組列印 URL
+// v0.9.0 — 對齊 i智慧 Pro DOM <dd>社區名稱</dd> 規則：把 "--"/"—"/"－"/空白視為空 sentinel；加 picked-from log 便於鎖定 key
 // v0.8.0 — 公寓/透天案件社區欄位留空：砍掉 propertyName/caseName fallback（會撿到案名）+ 加行銷文案啟發式過濾
 // v0.7.0 — caseIdx 改用 value-based scan（不再猜 key 名稱）
 // @author       coprime5231
@@ -22,7 +23,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.8.0';
+  const VERSION = '0.9.0';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -138,10 +139,20 @@
     return resp;
   }
 
+  // v0.9.0：把 i智慧 Pro 的空值 sentinel（DOM 上顯示為 "--"）當作未填處理，
+  // 讓 pick 繼續往下找 key；若全部 key 都是 sentinel，回 null（空字串傳回 CRM）。
+  const EMPTY_SENTINELS = new Set(['--', '—', '－', '-']);
+  function isEmptyVal(v) {
+    if (v == null) return true;
+    if (typeof v !== 'string') return false;
+    const s = v.trim();
+    return s === '' || EMPTY_SENTINELS.has(s);
+  }
+
   function pickShallow(obj, keys) {
     if (!obj || typeof obj !== 'object') return null;
     for (const k of keys) {
-      if (k in obj && obj[k] != null && obj[k] !== '') return obj[k];
+      if (k in obj && !isEmptyVal(obj[k])) return obj[k];
     }
     return null;
   }
@@ -149,11 +160,11 @@
   function pickDeep(obj, keys) {
     if (!obj || typeof obj !== 'object') return null;
     const shallow = pickShallow(obj, keys);
-    if (shallow != null && shallow !== '') return shallow;
+    if (!isEmptyVal(shallow)) return shallow;
     for (const v of Object.values(obj)) {
       if (v && typeof v === 'object') {
         const r = pickDeep(v, keys);
-        if (r != null && r !== '') return r;
+        if (!isEmptyVal(r)) return r;
       }
     }
     return null;
@@ -319,18 +330,25 @@
 
       const staff = inCharge ? (inCharge.mStaff || inCharge.MStaff || inCharge.dStaff || inCharge.DStaff) : null;
 
-      // v0.8.0：只從「真正的社區/建物名」key 抓；propertyName/caseName 是案名/行銷標題，
-      // 公寓/透天沒社區時 fallback 到這會撿到「陽明商圈-陽明學區-市場稀有翻新公寓1樓」這種垃圾。
-      const communityNameRaw =
-        pickDeep(detail, [
-          'buildingName', 'BuildingName',
-          'communityName', 'CommunityName', 'societyName', 'SocietyName',
-          '社區名稱', '社區',
-        ])
-        || pickDeep(searchItem, [
-          'buildingName', 'BuildingName',
-          'communityName', 'CommunityName', 'societyName', 'SocietyName',
-        ]);
+      // v0.9.0：對齊 i智慧 Pro 的 <dd>社區名稱</dd> 規則 ——
+      //   真社區 → 顯示社區名稱（如「生活大亨」/「遠東麗市」/「皇家水晶晶NO2透天區」）
+      //   無社區（公寓/透天）→ 顯示 "--"
+      // SPA 的 "--" 必然來自 API 某個欄位（typically null/empty），pickShallow 已把常見 sentinel
+      // ("--"/"—"/"－"/"-"/空白) 當 empty 跳過，所以 pickDeep 全部 miss → 回空字串。
+      // 若某 UUID 仍撈到案名，按 F12 看 [B6 detail keys] + [B6 communityName picked] log，把 JSON 貼回來就能鎖定 key。
+      const COMMUNITY_KEYS = [
+        'buildingName', 'BuildingName',
+        'communityName', 'CommunityName', 'societyName', 'SocietyName',
+        '社區名稱', '社區',
+      ];
+      const communityFromDetail = pickDeep(detail, COMMUNITY_KEYS);
+      const communityFromSearch = pickDeep(searchItem, COMMUNITY_KEYS);
+      const communityNameRaw = communityFromDetail || communityFromSearch;
+      console.log('[B6 communityName picked]', {
+        fromDetail: communityFromDetail,
+        fromSearch: communityFromSearch,
+        final: communityNameRaw,
+      });
       // 輔助啟發式：API 若仍吐行銷文案（如 key 名變動、或資料品質不佳），過濾掉。
       // 只殺高訊號的行銷詞 / 長度，避免誤殺真社區名（如「XX公寓大廈」這種含「公寓」字但確實是社區的）。
       const communityName = looksLikeProjectTitle(communityNameRaw) ? '' : communityNameRaw;
