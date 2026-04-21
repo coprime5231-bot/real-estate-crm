@@ -23,9 +23,11 @@ type EditableField =
 const GRADE_OPTIONS: Grade[] = ['A級', 'B級', 'C級']
 
 // 客戶端送出 PATCH 的 payload 型別（area/needTags 傳字串給後端 parse）
-type PatchBody = Partial<Omit<Client, 'area' | 'needTags'>> & {
+// grade 明確允許 null：清空 Notion select 必須送 null（undefined 會被 JSON.stringify 砍掉，後端判定為沒帶、不動作）
+type PatchBody = Partial<Omit<Client, 'area' | 'needTags' | 'grade'>> & {
   area?: string
   needTags?: string
+  grade?: Grade | null
 }
 
 function joinMulti(v?: string | string[]): string {
@@ -93,7 +95,7 @@ export default function ClientBasicInfoTab({ client, onUpdate }: Props) {
       } else if (field === 'needTags') {
         body.needTags = value
       } else if (field === 'grade') {
-        body.grade = (value as Grade) || undefined
+        body.grade = (value as Grade) || null
       } else if (field === 'birthday') {
         body.birthday = value || null
       } else {
@@ -182,7 +184,7 @@ export default function ClientBasicInfoTab({ client, onUpdate }: Props) {
           </select>
         ) : (
           <DisplayButton onClick={() => setEditing('grade')}>
-            {client.grade || '—'}
+            {client.grade || '未分級'}
           </DisplayButton>
         )}
       </Row>
