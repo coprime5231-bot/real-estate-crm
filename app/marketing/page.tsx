@@ -773,25 +773,37 @@ export default function MarketingPage() {
     }, 15000) as unknown as number
   }
 
-  // B7: 社區名失焦 → 若樂居連結還沒值就去 /api/search/leju 自動補（不覆蓋使用者已填值）
-  const handleCommunityBlurFetchLeju = useCallback(async () => {
+  // B7 UX 續攤：社區名變更 → 自動補樂居連結。
+  // 綁 useEffect on state 變更（不是 onBlur），以支援 userscript postMessage 灌值這條路徑
+  // —— userscript setState 不會觸發 input 的 blur 事件，原本綁 onBlur 的版本永遠不會 fire。
+  // 500ms debounce 避免使用者逐字輸入時浪費 Serper 配額（2500 次免費額度有限）。
+  // cancelled flag 防 race：使用者快速改社區名，舊請求回來時不覆蓋新值。
+  useEffect(() => {
+    if (!showViewingModal) return
     const name = viewingCommunityName.trim()
-    if (!name) return
-    if (viewingCommunityLejuUrl.trim()) return // 已有值（使用者手填或 autocomplete 帶入）就不動
-    setLejuSearching(true)
-    try {
-      const res = await fetch(`/api/search/leju?name=${encodeURIComponent(name)}`)
-      const data = await res.json().catch(() => null)
-      if (res.ok && data?.url && typeof data.url === 'string') {
-        // 中途使用者手動填了才回來，不覆蓋
-        setViewingCommunityLejuUrl((prev) => (prev.trim() ? prev : data.url))
+    if (!name) return                              // 空名不搜（痛點 2：公寓/透天留空）
+    if (viewingCommunityLejuUrl.trim()) return     // 已有值（使用者手填 / CommunityAutocomplete cache 帶入）不覆蓋
+    let cancelled = false
+    const t = setTimeout(async () => {
+      if (cancelled) return
+      setLejuSearching(true)
+      try {
+        const res = await fetch(`/api/search/leju?name=${encodeURIComponent(name)}`)
+        const data = await res.json().catch(() => null)
+        if (!cancelled && res.ok && data?.url && typeof data.url === 'string') {
+          setViewingCommunityLejuUrl((prev) => (prev.trim() ? prev : data.url))
+        }
+      } catch (err) {
+        if (!cancelled) console.error('leju search failed:', err)
+      } finally {
+        if (!cancelled) setLejuSearching(false)
       }
-    } catch (err) {
-      console.error('leju search failed:', err)
-    } finally {
-      setLejuSearching(false)
+    }, 500)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
     }
-  }, [viewingCommunityName, viewingCommunityLejuUrl])
+  }, [viewingCommunityName, viewingCommunityLejuUrl, showViewingModal])
 
   // U2: 送出新增帶看
   const handleCreateViewing = async () => {
@@ -2017,7 +2029,6 @@ export default function MarketingPage() {
                     setViewingCommunityName(c.name)
                     if (c.leju_url) setViewingCommunityLejuUrl(c.leju_url)
                   }}
-                  onBlur={handleCommunityBlurFetchLeju}
                   placeholder="例如：太普"
                   inputClassName="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />

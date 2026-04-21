@@ -8,7 +8,6 @@ interface Props {
   name: string
   onChange: (name: string) => void
   onSelectCommunity: (community: Community) => void
-  onBlur?: () => void
   placeholder?: string
   className?: string
   inputClassName?: string
@@ -18,7 +17,6 @@ export default function CommunityAutocomplete({
   name,
   onChange,
   onSelectCommunity,
-  onBlur,
   placeholder,
   className,
   inputClassName,
@@ -90,7 +88,6 @@ export default function CommunityAutocomplete({
           setOpen(true)
         }}
         onFocus={handleFocus}
-        onBlur={onBlur}
         placeholder={placeholder}
         autoComplete="off"
         className={inputClassName}

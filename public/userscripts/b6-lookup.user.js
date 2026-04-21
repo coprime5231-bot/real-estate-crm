@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.7.0
+// @version      0.8.0
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）；列印頁若帶 ?autoPrint=1 自動觸發列印；回傳 payload 加 ycutCaseIdx 供 CRM 組列印 URL
+// v0.8.0 — 公寓/透天案件社區欄位留空：砍掉 propertyName/caseName fallback（會撿到案名）+ 加行銷文案啟發式過濾
 // v0.7.0 — caseIdx 改用 value-based scan（不再猜 key 名稱）
 // @author       coprime5231
 // @match        https://coprime5231-crm.zeabur.app/marketing*
@@ -21,7 +22,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.7.0';
+  const VERSION = '0.8.0';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -179,6 +180,22 @@
     };
   }
 
+  // v0.8.0：啟發式判斷「看起來像案名/行銷文案，不是社區名」
+  // 採保守策略：只殺高訊號詞彙 + 明顯過長，避免誤殺真社區名
+  //   - 真社區名含「公寓/透天」字樣（如「XX公寓大廈」）是可能的 → 不納入殺詞
+  //   - 真社區名罕見「稀有/翻新/市場/商圈/學區/樓中樓」→ 納入殺詞
+  //   - 真社區名長度通常 ≤ 15 字；行銷文案常 20+ 字
+  function looksLikeProjectTitle(s) {
+    if (!s) return false;
+    const str = String(s).trim();
+    if (!str) return false;
+    const KILLWORDS = ['稀有', '翻新', '市場', '商圈', '學區', '樓中樓', '↑', '↓'];
+    if (KILLWORDS.some(w => str.includes(w))) return true;
+    if (str.includes('/')) return true;        // 真社區名幾乎不含「/」
+    if (str.length > 20) return true;          // 過長即行銷文案
+    return false;
+  }
+
   function parseFloor(text) {
     if (text == null) return '';
     const s = String(text);
@@ -302,18 +319,21 @@
 
       const staff = inCharge ? (inCharge.mStaff || inCharge.MStaff || inCharge.dStaff || inCharge.DStaff) : null;
 
-      const communityName =
+      // v0.8.0：只從「真正的社區/建物名」key 抓；propertyName/caseName 是案名/行銷標題，
+      // 公寓/透天沒社區時 fallback 到這會撿到「陽明商圈-陽明學區-市場稀有翻新公寓1樓」這種垃圾。
+      const communityNameRaw =
         pickDeep(detail, [
           'buildingName', 'BuildingName',
           'communityName', 'CommunityName', 'societyName', 'SocietyName',
-          'propertyName', 'PropertyName', 'caseName', 'CaseName',
           '社區名稱', '社區',
         ])
         || pickDeep(searchItem, [
           'buildingName', 'BuildingName',
           'communityName', 'CommunityName', 'societyName', 'SocietyName',
-          'propertyName', 'PropertyName', 'caseName', 'CaseName',
         ]);
+      // 輔助啟發式：API 若仍吐行銷文案（如 key 名變動、或資料品質不佳），過濾掉。
+      // 只殺高訊號的行銷詞 / 長度，避免誤殺真社區名（如「XX公寓大廈」這種含「公寓」字但確實是社區的）。
+      const communityName = looksLikeProjectTitle(communityNameRaw) ? '' : communityNameRaw;
 
       const floorText =
         buildFloorText(detail)
