@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.9.1
+// @version      0.9.2
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）；列印頁若帶 ?autoPrint=1 自動觸發列印；回傳 payload 加 ycutCaseIdx 供 CRM 組列印 URL
+// v0.9.2 — i智慧 keyWord 是子字串模糊比對（4 碼也會撈到 7 碼物件）。改成在 caseList 裡找「某欄位精準等於輸入」的那筆，找不到視同 case_not_found，避免拿到無關物件。
 // v0.9.1 — searchType 從 "S"（複數店）改 "A"（全部）：聯賣他店物件之前一律回 0，現在涵蓋本店 / 複數店 / 聯賣他店全部 scope。對齊 i智慧 Pro 全部範圍實測 body。
 // v0.9.0 — 對齊 i智慧 Pro DOM <dd>社區名稱</dd> 規則：把 "--"/"—"/"－"/空白視為空 sentinel；加 picked-from log 便於鎖定 key
 // v0.8.0 — 公寓/透天案件社區欄位留空：砍掉 propertyName/caseName fallback（會撿到案名）+ 加行銷文案啟發式過濾
@@ -24,7 +25,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.9.1';
+  const VERSION = '0.9.2';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -171,6 +172,20 @@
     return null;
   }
 
+  // v0.9.2：判斷 search item 裡是否有任一頂層字串/數字欄位精準等於 target。
+  // 用來把 i智慧 模糊比對（子字串 keyWord）抓回的雜訊濾掉 — 真物件編號是 7 碼帶
+  // leading zero，幾乎不會跟其他欄位（樓層/坪數/版號等）撞值。
+  function itemHasExactValue(item, target) {
+    if (!item || typeof item !== 'object') return false;
+    const t = String(target).trim();
+    if (!t) return false;
+    for (const v of Object.values(item)) {
+      if (v == null || typeof v === 'object') continue;
+      if (String(v).trim() === t) return true;
+    }
+    return false;
+  }
+
   // 從 searchItem + detail 掃所有頂層欄位，凡 6~9 位純數字且不等於輸入對外編號
   // 的值都算候選；回傳第一個候選 + 完整候選清單（供排錯）。
   function findInternalCaseIdx(searchItem, detail, inputCaseNumber) {
@@ -271,27 +286,33 @@
     const items = pickShallow(searchData, ['caseList', 'CaseList', 'items', 'Items', 'list', 'List', 'result', 'Result'])
       || (Array.isArray(searchData) ? searchData : null)
       || (Array.isArray(searchResp) ? searchResp : null);
-    const firstItem = Array.isArray(items) && items.length > 0 ? items[0] : null;
+    const itemList = Array.isArray(items) ? items : [];
+
+    // v0.9.2：i智慧 keyWord 是子字串模糊比對 — 拿回多筆時必須挑「某欄位精準等於輸入」
+    // 的那筆，否則 4 碼輸入會撈到任意含該 4 碼的 7 碼物件。
+    const matchedItem = itemList.find((it) => itemHasExactValue(it, caseNumber)) || null;
 
     console.log('[B6 search data]', searchData);
-    console.log('[B6 search items count]', Array.isArray(items) ? items.length : 'not-array');
-    if (firstItem) {
-      console.log('[B6 firstItem keys]', Object.keys(firstItem));
-      console.log('[B6 firstItem]', firstItem);
-      console.log('[B6 firstItem UUIDs]', findAllUuids(firstItem));
+    console.log('[B6 search items count]', itemList.length);
+    if (matchedItem) {
+      console.log('[B6 matchedItem keys]', Object.keys(matchedItem));
+      console.log('[B6 matchedItem]', matchedItem);
+      console.log('[B6 matchedItem UUIDs]', findAllUuids(matchedItem));
+    } else if (itemList.length > 0) {
+      console.log('[B6 fuzzy noise] input=', caseNumber, '無精準對齊的 item — 視同 not_found；items=', itemList);
     }
 
 
     // G16: 只從 data.items[0] 的 caseKey 系列 key 取 UUID；
     // 禁止 deep scan / envelope fallback（會撈到響應 metadata 的 `id`，那不是 caseId）。
-    if (!firstItem) throw new Error('case_not_found');
+    if (!matchedItem) throw new Error('case_not_found');
 
-    const fromKey = pickShallow(firstItem, [
+    const fromKey = pickShallow(matchedItem, [
       'caseKey', 'CaseKey',
       'caseId', 'CaseId', 'caseUuid', 'CaseUuid', 'caseGuid', 'CaseGuid',
     ]);
     if (fromKey && UUID_RE.test(String(fromKey))) {
-      return { uuid: String(fromKey).match(UUID_RE)[0], searchItem: firstItem };
+      return { uuid: String(fromKey).match(UUID_RE)[0], searchItem: matchedItem };
     }
 
     throw new Error('case_not_found');
