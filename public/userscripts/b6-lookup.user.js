@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.9.2
+// @version      0.9.3
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）；列印頁若帶 ?autoPrint=1 自動觸發列印；回傳 payload 加 ycutCaseIdx 供 CRM 組列印 URL
+// v0.9.3 — autoPrint 等待邏輯：原本只等 .printBtn 出現 + 1200ms，但 .printBtn 是骨架渲染完就有、資料還沒到，列印會抓到「載入中」轉圈圈狀態（撐出 7 頁醜爆）。改成等 DOM 上「載入中」字樣消失才印，最多等 10 秒。
 // v0.9.2 — i智慧 keyWord 是子字串模糊比對（4 碼也會撈到 7 碼物件）。改成在 caseList 裡找「某欄位精準等於輸入」的那筆，找不到視同 case_not_found，避免拿到無關物件。
 // v0.9.1 — searchType 從 "S"（複數店）改 "A"（全部）：聯賣他店物件之前一律回 0，現在涵蓋本店 / 複數店 / 聯賣他店全部 scope。對齊 i智慧 Pro 全部範圍實測 body。
 // v0.9.0 — 對齊 i智慧 Pro DOM <dd>社區名稱</dd> 規則：把 "--"/"—"/"－"/空白視為空 sentinel；加 picked-from log 便於鎖定 key
@@ -25,7 +26,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.9.2';
+  const VERSION = '0.9.3';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -35,29 +36,58 @@
   const LOG = (...args) => console.log('[CRM×i智慧]', ...args);
 
   // ============ 列印頁自動觸發 ============
-  // CRM 列印按鈕打開新分頁時會附 ?autoPrint=1；列印頁 SPA 渲染完 .printBtn 後點一下
+  // CRM 列印按鈕打開新分頁時會附 ?autoPrint=1；
+  // v0.9.3：兩段式等待 — (1) 等 .printBtn 出現代表骨架渲染好；
+  //         (2) 再等 SPA 把資料載完（DOM 上「載入中」字樣消失）才觸發列印。
   if (location.host === 'is.ycut.com.tw' &&
       location.pathname === '/case/report/market/redirect' &&
       new URLSearchParams(location.search).get('autoPrint') === '1') {
     LOG('userscript loaded v' + VERSION + ' (autoPrint mode)');
     LOG('autoPrint mode, waiting for .printBtn');
+
+    // 偵測 SPA 的「載入中」遮罩 — 走葉節點 textContent 比對，避免抓到祖先節點
+    function isLoadingVisible() {
+      const all = document.querySelectorAll('body *');
+      for (const el of all) {
+        if (el.children.length > 0) continue;
+        const txt = (el.textContent || '').trim();
+        if (txt === '載入中' && el.offsetParent !== null) return true;
+      }
+      return false;
+    }
+
+    function firePrint(btn) {
+      try { btn.click(); } catch (e) { pageWindow.print(); }
+    }
+
+    function waitLoadingThenPrint(btn) {
+      let waitTries = 0;
+      const MAX_WAIT_TRIES = 100; // 100 × 100ms = 10s
+      const GRACE_MS = 500;       // 載入中消失後再多等一拍讓 layout 收斂
+      const waitTimer = setInterval(() => {
+        waitTries++;
+        if (!isLoadingVisible()) {
+          clearInterval(waitTimer);
+          LOG('loading cleared after ' + waitTries + ' wait ticks, firing print in ' + GRACE_MS + 'ms');
+          setTimeout(() => firePrint(btn), GRACE_MS);
+        } else if (waitTries >= MAX_WAIT_TRIES) {
+          clearInterval(waitTimer);
+          LOG('loading still visible after ' + waitTries + ' ticks, firing print anyway');
+          setTimeout(() => firePrint(btn), GRACE_MS);
+        }
+      }, 100);
+    }
+
     let tries = 0;
     const MAX_TRIES = 150;
-    const DELAY_AFTER_FOUND = 1200;
     const timer = setInterval(() => {
       tries++;
       const btn = Array.from(document.querySelectorAll('button.printBtn'))
         .find((b) => (b.textContent || '').trim() === '列印');
       if (btn) {
         clearInterval(timer);
-        LOG('printBtn found after ' + tries + ' tries, firing window.print() in ' + DELAY_AFTER_FOUND + 'ms');
-        setTimeout(() => {
-          try {
-            btn.click();
-          } catch (e) {
-            pageWindow.print();
-          }
-        }, DELAY_AFTER_FOUND);
+        LOG('printBtn found after ' + tries + ' tries, now waiting for "載入中" to clear');
+        waitLoadingThenPrint(btn);
       } else if (tries >= MAX_TRIES) {
         clearInterval(timer);
         LOG('printBtn not found after ' + tries + ' tries, giving up autoPrint');
