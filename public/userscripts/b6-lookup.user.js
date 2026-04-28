@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         CRM × i智慧 物件自動帶入 (B6)
 // @namespace    https://coprime5231-crm.zeabur.app/
-// @version      0.9.0
+// @version      0.9.1
 // @description  在 CRM 新增帶看 Modal 輸入 i智慧 物件編號或 detail URL → 自動帶入社區、地點、永慶連結、同事、同事手機（地址含「號」才帶）；列印頁若帶 ?autoPrint=1 自動觸發列印；回傳 payload 加 ycutCaseIdx 供 CRM 組列印 URL
+// v0.9.1 — searchType 從 "S"（複數店）改 "A"（全部）：聯賣他店物件之前一律回 0，現在涵蓋本店 / 複數店 / 聯賣他店全部 scope。對齊 i智慧 Pro 全部範圍實測 body。
 // v0.9.0 — 對齊 i智慧 Pro DOM <dd>社區名稱</dd> 規則：把 "--"/"—"/"－"/空白視為空 sentinel；加 picked-from log 便於鎖定 key
 // v0.8.0 — 公寓/透天案件社區欄位留空：砍掉 propertyName/caseName fallback（會撿到案名）+ 加行銷文案啟發式過濾
 // v0.7.0 — caseIdx 改用 value-based scan（不再猜 key 名稱）
@@ -23,7 +24,7 @@
 
   const API_BASE = 'https://is.ycut.com.tw';
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const VERSION = '0.9.0';
+  const VERSION = '0.9.1';
   // Tampermonkey 沙箱：跨 context 訊息必須走 unsafeWindow 才能抵達頁面 window
   const pageWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
   const COMMON_HEADERS = {
@@ -96,7 +97,7 @@
       condition: {
         mode: 'C',
         sellRent: 'A',
-        searchType: 'S',
+        searchType: 'A',
         sTeamStores: [],
         city1: null, city2: null, city3: null,
         district1: null, district2: null, district3: null,
