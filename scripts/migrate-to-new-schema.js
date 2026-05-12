@@ -73,12 +73,14 @@ function normalizeName(n) {
 }
 
 // 共有人解析（屋主欄位可能塞「老王、王太太」/「老王/王太太」/「老王 王太太」）
+// 「(楊媽媽)」這種括號名 = 備註、不建人物（user 決策 2c）
 function splitOwners(s) {
   if (!s) return []
   return s
     .split(/[、,，/／\s]+/)
     .map((x) => x.trim())
     .filter(Boolean)
+    .filter((x) => !/^\(.*\)$/.test(x))
 }
 
 async function fetchAllPages(dbId) {
@@ -212,7 +214,7 @@ function dedupePeople(rawPersons) {
       // 合併
       target.roles.add(p.roleHint)
       target.oldRefs.push(...p.oldRefs)
-      if (!target.name && p.name) target.name = p.name
+      if (p.name) target.allNames.push(p.name) // 收集所有候選名字
       if (!target.birthday && p.birthday) target.birthday = p.birthday
       if (!target.grade && p.grade) target.grade = p.grade
       if (p.zones) target.zones = [...new Set([...target.zones, ...p.zones])]
@@ -223,6 +225,7 @@ function dedupePeople(rawPersons) {
     } else {
       const entry = {
         name: p.name || '(未命名)',
+        allNames: p.name ? [p.name] : [],
         phone: p.phone,
         idNumber: p.idNumber || null,
         birthday: p.birthday || null,
@@ -419,10 +422,206 @@ async function main() {
   if (!EXECUTE) {
     console.log('\n>>> This was DRY-RUN. No data written to Notion.')
     console.log('>>> To execute, re-run with: node scripts/migrate-to-new-schema.js --execute')
-  } else {
-    console.log('\n>>> NOTE: --execute mode not yet implemented in this Phase 1b script.')
-    console.log('>>> Run dry-run first, get user approval, then I will fill in the write-back.')
+    return
   }
+
+  // ============================================================
+  // EXECUTE: 寫入 Notion
+  // ============================================================
+  console.log('\n=== EXECUTE: Writing to Notion ===')
+  console.log('Rate limit: ~3 req/sec (350ms sleep between writes)')
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+  // 舊 page id → 新 person id 對照
+  const oldToNewPerson = new Map() // oldPersonRef key → newPersonId
+  const oldEntrustToNewProperty = new Map() // oldEntrustId → newPropertyId
+  const oldProspectToNewProperty = new Map() // oldProspectId → newPropertyId
+  const oldBuyerToNewNeed = new Map() // oldBuyerId → newNeedId
+
+  // 取得人物的「最佳名字」：剝 b\d+ 前綴、不要 (...) 括號註記、選最長有意義版本
+  function pickBestName(candidates) {
+    const cleaned = candidates
+      .filter((n) => n && !/^\(.*\)$/.test(n.trim()))
+      .map((n) => n.trim().replace(/^b\d+/i, ''))
+      .filter((n) => n.length > 0)
+    if (!cleaned.length) return '(未命名)'
+    // 取最長（資訊多）
+    return cleaned.sort((a, b) => b.length - a.length)[0]
+  }
+
+  // 建人物
+  console.log(`\nCreating ${mergedPeople.length} people...`)
+  let pCount = 0
+  for (const person of mergedPeople) {
+    // 用所有候選名（dedupe 階段收集的 allNames）挑最佳
+    const finalName = pickBestName(person.allNames?.length ? person.allNames : [person.name])
+
+    const props = {
+      名稱: { title: [{ text: { content: finalName } }] },
+      角色: { multi_select: [...person.roles].map((r) => ({ name: r })) },
+    }
+    if (person.phone) props.手機 = { phone_number: person.phone }
+    if (person.idNumber) props.身份證字號 = { rich_text: [{ text: { content: person.idNumber } }] }
+    if (person.birthday) props.生日 = { date: { start: person.birthday } }
+    if (person.grade) props.客戶等級 = { select: { name: person.grade } }
+    if (person.zones?.length) props.區域偏好 = { multi_select: person.zones.map((z) => ({ name: z })) }
+
+    try {
+      const res = await notion.pages.create({
+        parent: { database_id: NEW.people },
+        properties: props,
+      })
+      // 用所有 oldRefs 都對應到這個新 person
+      for (const ref of person.oldRefs) {
+        const key = `${ref.source}:${ref.oldId}:${ref.propertyName || ''}`
+        oldToNewPerson.set(key, res.id)
+        // 也存簡化 key
+        oldToNewPerson.set(`${ref.source}:${ref.oldId}`, res.id)
+      }
+      pCount++
+      if (pCount % 10 === 0) console.log(`  ${pCount}/${mergedPeople.length}...`)
+    } catch (err) {
+      console.error(`  ✗ failed: ${finalName} :: ${err.message}`)
+    }
+    await sleep(350)
+  }
+  console.log(`  ✓ ${pCount}/${mergedPeople.length} people created`)
+
+  // 建物件 (entrust + prospect)
+  console.log(`\nCreating ${properties.length} properties...`)
+  let propCount = 0
+  let unnamedCounter = 0
+  for (const rec of properties) {
+    const isEntrust = rec.source === 'entrust'
+    const prop = rec.property
+
+    // 名稱：c+a+流水號 fallback
+    const owners = rec.owners.filter((o) => o.name && !/^\(.*\)$/.test(o.name))
+    const ownerNamesForTitle = owners.map((o) => o.name.replace(/^b\d+/i, '')).join('、')
+    const addr = isEntrust ? prop.address : prop.objectAddr
+    let finalName = prop.name?.trim() || ''
+    if (!finalName) {
+      if (ownerNamesForTitle && addr) finalName = `${ownerNamesForTitle} - ${addr}`
+      else if (addr) finalName = addr
+      else finalName = `(無名物件 #${++unnamedCounter})`
+    }
+
+    const props = {
+      名稱: { title: [{ text: { content: finalName } }] },
+    }
+
+    // 屋主 relation
+    const ownerPersonIds = []
+    for (const o of owners) {
+      const key = `${rec.source}:${rec.oldId}:${prop.name || ''}`
+      const pid = oldToNewPerson.get(key) || oldToNewPerson.get(`${rec.source}:${rec.oldId}`)
+      if (pid) ownerPersonIds.push(pid)
+    }
+    if (ownerPersonIds.length) {
+      props.屋主 = { relation: [...new Set(ownerPersonIds)].map((id) => ({ id })) }
+    }
+
+    if (isEntrust) {
+      // entrust 欄位
+      if (prop.address) props.物件地址 = { rich_text: [{ text: { content: prop.address } }] }
+      if (prop.status) props.狀態 = { select: { name: prop.status } }
+      if (prop.expiry) props.委託到期日 = { date: { start: prop.expiry } }
+      if (prop.important) props.重要事項 = { rich_text: [{ text: { content: prop.important } }] }
+      if (prop.web) props.網頁 = { url: prop.web }
+    } else {
+      // prospect 欄位
+      props.狀態 = { select: { name: '開發信' } }
+      if (prop.objectAddr) props.物件地址 = { rich_text: [{ text: { content: prop.objectAddr } }] }
+      if (prop.householdAddr) props.戶藉地址 = { rich_text: [{ text: { content: prop.householdAddr } }] }
+      if (prop.mainBuilding) props.主建物 = { rich_text: [{ text: { content: prop.mainBuilding } }] }
+      if (prop.area) props.坪數 = { rich_text: [{ text: { content: prop.area } }] }
+      if (prop.layout) props.格局 = { rich_text: [{ text: { content: prop.layout } }] }
+      if (prop.price) props.開價 = { rich_text: [{ text: { content: prop.price } }] }
+      if (prop.objectLetter) props.物信 = { rich_text: [{ text: { content: prop.objectLetter } }] }
+      if (prop.householdLetter) props.戶信 = { rich_text: [{ text: { content: prop.householdLetter } }] }
+      if (typeof prop.devLetter === 'boolean') props.開發信 = { checkbox: prop.devLetter }
+      if (prop.devProgress?.length) props.開發進度 = { multi_select: prop.devProgress.map((n) => ({ name: n })) }
+      if (prop.parking?.length) props.車位 = { multi_select: prop.parking.map((n) => ({ name: n })) }
+      if (prop.todo) props.待辦 = { select: { name: prop.todo } }
+      if (prop.synced) props.已同步 = { select: { name: prop.synced } }
+    }
+
+    try {
+      const res = await notion.pages.create({
+        parent: { database_id: NEW.property },
+        properties: props,
+      })
+      if (isEntrust) oldEntrustToNewProperty.set(rec.oldId, res.id)
+      else oldProspectToNewProperty.set(rec.oldId, res.id)
+      propCount++
+      if (propCount % 10 === 0) console.log(`  ${propCount}/${properties.length}...`)
+    } catch (err) {
+      console.error(`  ✗ failed: ${finalName} :: ${err.message}`)
+      if (err.body) console.error(`     body: ${JSON.stringify(err.body).slice(0, 300)}`)
+    }
+    await sleep(350)
+  }
+  console.log(`  ✓ ${propCount}/${properties.length} properties created`)
+
+  // 建買方需求
+  console.log(`\nCreating ${buyerRecs.length} buyer needs...`)
+  let needCount = 0
+  for (const r of buyerRecs) {
+    const need = r.need
+    const personId = oldToNewPerson.get(`buyer:${r.oldId}`)
+
+    const props = {
+      名稱: { title: [{ text: { content: need.name?.trim() || '(未命名)' } }] },
+      狀態: { select: { name: '配案中' } },
+    }
+    if (personId) props.客戶 = { relation: [{ id: personId }] }
+    if (need.budget) props.預算 = { select: { name: need.budget } }
+    if (need.zones?.length) props.區域 = { multi_select: need.zones.map((n) => ({ name: n })) }
+    if (need.layouts?.length) props.格局 = { multi_select: need.layouts.map((n) => ({ name: n })) }
+    if (need.needTags?.length) props.需求標籤 = { multi_select: need.needTags.map((n) => ({ name: n })) }
+    if (need.needText) props.需求 = { rich_text: [{ text: { content: need.needText } }] }
+    if (need.note) props.NOTE = { rich_text: [{ text: { content: need.note } }] }
+    if (need.progress) props.最近進展 = { rich_text: [{ text: { content: need.progress } }] }
+
+    try {
+      const res = await notion.pages.create({
+        parent: { database_id: NEW.buyer_need },
+        properties: props,
+      })
+      oldBuyerToNewNeed.set(r.oldId, res.id)
+      needCount++
+      if (needCount % 10 === 0) console.log(`  ${needCount}/${buyerRecs.length}...`)
+    } catch (err) {
+      console.error(`  ✗ failed: ${need.name} :: ${err.message}`)
+      if (err.body) console.error(`     body: ${JSON.stringify(err.body).slice(0, 300)}`)
+    }
+    await sleep(350)
+  }
+  console.log(`  ✓ ${needCount}/${buyerRecs.length} buyer needs created`)
+
+  // 寫對照表
+  const mapping = {
+    generated_at: new Date().toISOString(),
+    new_db_ids: NEW,
+    counts: {
+      people_created: pCount,
+      properties_created: propCount,
+      buyer_needs_created: needCount,
+    },
+    mappings: {
+      // oldKey → newPersonId（key = "source:oldId" 或 "source:oldId:propertyName"）
+      old_to_new_person: Object.fromEntries(oldToNewPerson),
+      old_entrust_to_new_property: Object.fromEntries(oldEntrustToNewProperty),
+      old_prospect_to_new_property: Object.fromEntries(oldProspectToNewProperty),
+      old_buyer_to_new_need: Object.fromEntries(oldBuyerToNewNeed),
+    },
+  }
+  const mappingPath = path.join(__dirname, '..', 'outputs', 'migration-result.json')
+  fs.writeFileSync(mappingPath, JSON.stringify(mapping, null, 2), 'utf8')
+  console.log(`\nMapping saved: ${mappingPath}`)
+  console.log('\n=== Done ===')
+  console.log(`  人物: ${pCount}, 物件: ${propCount}, 買方需求: ${needCount}`)
 }
 
 main().catch((err) => {

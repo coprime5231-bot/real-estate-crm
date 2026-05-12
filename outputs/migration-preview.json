@@ -1,6 +1,6 @@
 {
   "mode": "dry-run",
-  "generated_at": "2026-05-12T15:16:14.496Z",
+  "generated_at": "2026-05-12T15:22:57.516Z",
   "counts": {
     "old": {
       "buyer": 78,
@@ -14,10 +14,10 @@
       "buyer_need": 78
     },
     "derived": {
-      "raw_person_records": 126,
-      "dedup_savings": 2,
+      "raw_person_records": 125,
+      "dedup_savings": 1,
       "换屋客": 1,
-      "共有人物件": 1
+      "共有人物件": 0
     }
   },
   "warnings": [
@@ -30,30 +30,9 @@
       ]
     },
     {
-      "type": "same_phone_diff_names",
-      "phone": "0963610960",
-      "names": [
-        "謝秀霞",
-        "(楊媽媽)"
-      ]
-    },
-    {
       "type": "nameless_property",
       "entrust_count": 0,
       "prospect_count": 19
-    },
-    {
-      "type": "multi_owners_one_phone",
-      "count": 1,
-      "examples": [
-        {
-          "property": "甜蜜家庭",
-          "owners": [
-            "謝秀霞",
-            "(楊媽媽)"
-          ]
-        }
-      ]
     }
   ],
   "swappers_sample": [
@@ -77,13 +56,5 @@
       ]
     }
   ],
-  "multi_owners_sample": [
-    {
-      "property": "甜蜜家庭",
-      "owners": [
-        "謝秀霞",
-        "(楊媽媽)"
-      ]
-    }
-  ]
+  "multi_owners_sample": []
 }
