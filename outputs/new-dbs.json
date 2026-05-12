@@ -1,0 +1,21 @@
+{
+  "created_at": "2026-05-12T15:02:03.898Z",
+  "main_page_id": "32156ff9-a859-8091-916e-d853c177fa0f",
+  "dbs": {
+    "people": {
+      "id": "35e56ff9-a859-8186-a666-cec33216dc6d",
+      "url": "https://www.notion.so/35e56ff9a8598186a666cec33216dc6d",
+      "title": "人物"
+    },
+    "property": {
+      "id": "35e56ff9-a859-81d4-8e5e-df99b5781504",
+      "url": "https://www.notion.so/35e56ff9a85981d48e5edf99b5781504",
+      "title": "物件"
+    },
+    "buyer_need": {
+      "id": "35e56ff9-a859-81f6-a34b-f89c55bf32c5",
+      "url": "https://www.notion.so/35e56ff9a85981f6a34bf89c55bf32c5",
+      "title": "買方需求"
+    }
+  }
+}
