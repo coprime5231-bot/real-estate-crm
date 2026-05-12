@@ -57,6 +57,100 @@ export interface AIProjectData {
   platforms?: string[]
 }
 
+// === New schema (Phase 2, 2026-05-12) ===
+// 人物 / 物件 / 買方需求 三層結構、跟舊 BuyerData/PropertyData 並存
+// 舊 routes (/api/clients、/api/properties) 仍指向舊 DB、雙軌期 ≥ 2 週
+
+export interface PersonData {
+  id: string
+  name: string
+  phone?: string
+  idNumber?: string
+  birthday?: string | null
+  roles: string[] // 買方 / 屋主 / 潛在屋主 / 成交客戶（可多選）
+  grade?: 'A級' | 'B級' | 'C級' | 'D級' | '未接'
+  zones: string[]
+  source?: string
+  note?: string
+  progress?: string
+  nextFollowUp?: string
+}
+
+export type PropertyStatus = '開發信' | '追蹤' | '委託' | '過期' | '成交'
+export type VisitTodo = '物件地拜訪' | '戶藉地拜訪' | '物件地覆訪' | '戶藉地覆訪'
+
+export interface PropertyV2Data {
+  id: string
+  name: string
+  address?: string
+  householdAddress?: string
+  ownerIds: string[]
+  status?: PropertyStatus
+  devLetter?: boolean
+  devProgress: string[]
+  visitTodo?: VisitTodo
+  visitSynced?: VisitTodo
+  area?: string
+  mainBuilding?: string
+  layout?: string
+  parking: string[]
+  price?: string
+  objectLetter?: string
+  householdLetter?: string
+  expiry?: string | null
+  important?: string
+  web?: string
+}
+
+export type BuyerNeedStatus = '配案中' | '已成交' | '暫停' | '放棄'
+
+export interface BuyerNeedData {
+  id: string
+  name: string
+  clientId?: string
+  status?: BuyerNeedStatus
+  budget?: string
+  zones: string[]
+  layouts: string[]
+  needTags: string[]
+  needText?: string
+  note?: string
+  progress?: string
+  matchedPropertyIds: string[]
+  viewedPropertyIds: string[]
+}
+
+// === Helpers ===
+
+export function extractMultiSelectNames(prop: any): string[] {
+  if (!prop?.multi_select) return []
+  return prop.multi_select.map((o: any) => o.name).filter(Boolean)
+}
+
+export function extractRelationIds(prop: any): string[] {
+  if (!prop?.relation) return []
+  return prop.relation.map((r: any) => r.id).filter(Boolean)
+}
+
+/**
+ * 分頁讀完一個 DB 全部 page（Notion API 上限 100/page）
+ */
+export async function queryDatabaseAll(databaseId: string, filter?: any): Promise<any[]> {
+  const results: any[] = []
+  let cursor: string | undefined = undefined
+  do {
+    const res: any = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100,
+      start_cursor: cursor,
+      ...(filter ? { filter } : {}),
+    })
+    results.push(...res.results)
+    cursor = res.has_more ? res.next_cursor : undefined
+  } while (cursor)
+  return results
+}
+
 export const extractText = (richText: any[]): string => {
   if (!richText || !Array.isArray(richText)) return ''
   return richText.map((block: any) => block.plain_text).join('')
