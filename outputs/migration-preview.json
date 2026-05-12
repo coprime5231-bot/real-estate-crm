@@ -1,0 +1,89 @@
+{
+  "mode": "dry-run",
+  "generated_at": "2026-05-12T15:16:14.496Z",
+  "counts": {
+    "old": {
+      "buyer": 78,
+      "entrust": 23,
+      "prospect": 24,
+      "total": 125
+    },
+    "new": {
+      "people_after_dedupe": 124,
+      "property": 47,
+      "buyer_need": 78
+    },
+    "derived": {
+      "raw_person_records": 126,
+      "dedup_savings": 2,
+      "换屋客": 1,
+      "共有人物件": 1
+    }
+  },
+  "warnings": [
+    {
+      "type": "same_phone_diff_names",
+      "phone": "0973203816",
+      "names": [
+        "b12柚均",
+        "郭柚均"
+      ]
+    },
+    {
+      "type": "same_phone_diff_names",
+      "phone": "0963610960",
+      "names": [
+        "謝秀霞",
+        "(楊媽媽)"
+      ]
+    },
+    {
+      "type": "nameless_property",
+      "entrust_count": 0,
+      "prospect_count": 19
+    },
+    {
+      "type": "multi_owners_one_phone",
+      "count": 1,
+      "examples": [
+        {
+          "property": "甜蜜家庭",
+          "owners": [
+            "謝秀霞",
+            "(楊媽媽)"
+          ]
+        }
+      ]
+    }
+  ],
+  "swappers_sample": [
+    {
+      "name": "b12柚均",
+      "phone": "0973203816",
+      "roles": [
+        "買方",
+        "屋主"
+      ],
+      "old_refs": [
+        {
+          "source": "buyer",
+          "oldId": "29956ff9-a859-8017-90a4-c92161723f5f"
+        },
+        {
+          "source": "entrust",
+          "oldId": "34856ff9-a859-80fd-82ac-e24d19ecca97",
+          "propertyName": "萬丹印象五樓"
+        }
+      ]
+    }
+  ],
+  "multi_owners_sample": [
+    {
+      "property": "甜蜜家庭",
+      "owners": [
+        "謝秀霞",
+        "(楊媽媽)"
+      ]
+    }
+  ]
+}
