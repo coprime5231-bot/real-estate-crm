@@ -8,6 +8,17 @@ import {
   extractMultiSelectNames,
   extractRelationIds,
   queryDatabaseAll,
+  createNotionPage,
+  updateNotionPage,
+  compactProps,
+  propTitle,
+  propRichText,
+  propUrl,
+  propCheckbox,
+  propSelect,
+  propMultiSelect,
+  propDate,
+  propRelation,
 } from '@/lib/notion'
 
 /**
@@ -75,5 +86,90 @@ export async function GET(request: NextRequest) {
       { error: '無法獲取物件資料', detail: err?.message },
       { status: 500 }
     )
+  }
+}
+
+type PropertyMutation = Partial<{
+  name: string
+  address: string
+  householdAddress: string
+  ownerIds: string[]
+  status: PropertyStatus | null
+  devLetter: boolean
+  devProgress: string[]
+  visitTodo: VisitTodo | null
+  visitSynced: VisitTodo | null
+  area: string
+  mainBuilding: string
+  layout: string
+  parking: string[]
+  price: string
+  objectLetter: string
+  householdLetter: string
+  expiry: string | null
+  important: string
+  web: string
+}>
+
+function buildPropertyProps(body: PropertyMutation) {
+  return compactProps({
+    '名稱': propTitle(body.name),
+    '物件地址': propRichText(body.address),
+    '戶藉地址': propRichText(body.householdAddress),
+    '屋主': propRelation(body.ownerIds),
+    '狀態': propSelect(body.status),
+    '開發信': propCheckbox(body.devLetter),
+    '開發進度': propMultiSelect(body.devProgress),
+    '待辦': propSelect(body.visitTodo),
+    '已同步': propSelect(body.visitSynced),
+    '坪數': propRichText(body.area),
+    '主建物': propRichText(body.mainBuilding),
+    '格局': propRichText(body.layout),
+    '車位': propMultiSelect(body.parking),
+    '開價': propRichText(body.price),
+    '物信': propRichText(body.objectLetter),
+    '戶信': propRichText(body.householdLetter),
+    '委託到期日': propDate(body.expiry),
+    '重要事項': propRichText(body.important),
+    '網頁': propUrl(body.web),
+  })
+}
+
+/**
+ * POST /api/properties-v2  body=PropertyMutation（name 必填）
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const dbId = process.env.NOTION_PROPERTY_DB_ID
+    if (!dbId) {
+      return NextResponse.json({ error: '未配置 NOTION_PROPERTY_DB_ID' }, { status: 400 })
+    }
+    const body = (await request.json()) as PropertyMutation
+    if (!body.name) {
+      return NextResponse.json({ error: 'name 必填' }, { status: 400 })
+    }
+    const page = await createNotionPage(dbId, buildPropertyProps(body))
+    return NextResponse.json({ id: (page as any).id })
+  } catch (err: any) {
+    console.error('Failed to create property:', err)
+    return NextResponse.json({ error: '無法建立物件', detail: err?.message }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/properties-v2  body={id, ...PropertyMutation}
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = (await request.json()) as PropertyMutation & { id?: string }
+    if (!body.id) {
+      return NextResponse.json({ error: 'id 必填' }, { status: 400 })
+    }
+    const { id, ...mutation } = body
+    await updateNotionPage(id, buildPropertyProps(mutation))
+    return NextResponse.json({ ok: true, id })
+  } catch (err: any) {
+    console.error('Failed to update property:', err)
+    return NextResponse.json({ error: '無法更新物件', detail: err?.message }, { status: 500 })
   }
 }

@@ -7,6 +7,14 @@ import {
   extractMultiSelectNames,
   extractRelationIds,
   queryDatabaseAll,
+  createNotionPage,
+  updateNotionPage,
+  compactProps,
+  propTitle,
+  propRichText,
+  propSelect,
+  propMultiSelect,
+  propRelation,
 } from '@/lib/notion'
 
 /**
@@ -75,5 +83,76 @@ export async function GET(request: NextRequest) {
       { error: '無法獲取買方需求資料', detail: err?.message },
       { status: 500 }
     )
+  }
+}
+
+type BuyerNeedMutation = Partial<{
+  name: string
+  clientId: string | null
+  status: BuyerNeedStatus | null
+  budget: string | null
+  zones: string[]
+  layouts: string[]
+  needTags: string[]
+  needText: string
+  note: string
+  progress: string
+  matchedPropertyIds: string[]
+  viewedPropertyIds: string[]
+}>
+
+function buildBuyerNeedProps(body: BuyerNeedMutation) {
+  return compactProps({
+    '名稱': propTitle(body.name),
+    '客戶': body.clientId === undefined ? undefined : propRelation(body.clientId ? [body.clientId] : []),
+    '狀態': propSelect(body.status),
+    '預算': propSelect(body.budget),
+    '區域': propMultiSelect(body.zones),
+    '格局': propMultiSelect(body.layouts),
+    '需求標籤': propMultiSelect(body.needTags),
+    '需求': propRichText(body.needText),
+    'NOTE': propRichText(body.note),
+    '最近進展': propRichText(body.progress),
+    '配上的物件': propRelation(body.matchedPropertyIds),
+    '帶看過的物件': propRelation(body.viewedPropertyIds),
+  })
+}
+
+/**
+ * POST /api/buyer-needs  body=BuyerNeedMutation（name 必填）
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const dbId = process.env.NOTION_BUYER_NEED_DB_ID
+    if (!dbId) {
+      return NextResponse.json({ error: '未配置 NOTION_BUYER_NEED_DB_ID' }, { status: 400 })
+    }
+    const body = (await request.json()) as BuyerNeedMutation
+    if (!body.name) {
+      return NextResponse.json({ error: 'name 必填' }, { status: 400 })
+    }
+    const page = await createNotionPage(dbId, buildBuyerNeedProps(body))
+    return NextResponse.json({ id: (page as any).id })
+  } catch (err: any) {
+    console.error('Failed to create buyer need:', err)
+    return NextResponse.json({ error: '無法建立買方需求', detail: err?.message }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/buyer-needs  body={id, ...BuyerNeedMutation}
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = (await request.json()) as BuyerNeedMutation & { id?: string }
+    if (!body.id) {
+      return NextResponse.json({ error: 'id 必填' }, { status: 400 })
+    }
+    const { id, ...mutation } = body
+    await updateNotionPage(id, buildBuyerNeedProps(mutation))
+    return NextResponse.json({ ok: true, id })
+  } catch (err: any) {
+    console.error('Failed to update buyer need:', err)
+    return NextResponse.json({ error: '無法更新買方需求', detail: err?.message }, { status: 500 })
   }
 }

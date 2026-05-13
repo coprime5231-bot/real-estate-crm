@@ -183,3 +183,59 @@ export const daysUntil = (dateString?: string): number => {
 export const isOverdue = (dateString?: string): boolean => {
   return daysUntil(dateString) < 0
 }
+
+// === Mutation builders (Phase 3、寫回新 schema 用) ===
+
+export const propTitle = (text?: string) =>
+  text === undefined ? undefined : { title: [{ text: { content: text } }] }
+
+export const propRichText = (text?: string) =>
+  text === undefined ? undefined : { rich_text: text ? [{ text: { content: text } }] : [] }
+
+export const propPhone = (phone?: string) =>
+  phone === undefined ? undefined : { phone_number: phone || null }
+
+export const propUrl = (url?: string) =>
+  url === undefined ? undefined : { url: url || null }
+
+export const propCheckbox = (val?: boolean) =>
+  val === undefined ? undefined : { checkbox: !!val }
+
+export const propSelect = (name?: string | null) => {
+  if (name === undefined) return undefined
+  return { select: name ? { name } : null }
+}
+
+export const propMultiSelect = (names?: string[]) =>
+  names === undefined ? undefined : { multi_select: (names || []).map((n) => ({ name: n })) }
+
+export const propDate = (iso?: string | null) => {
+  if (iso === undefined) return undefined
+  return { date: iso ? { start: iso } : null }
+}
+
+export const propRelation = (ids?: string[]) =>
+  ids === undefined ? undefined : { relation: (ids || []).map((id) => ({ id })) }
+
+/** 去掉 undefined key，避免送空欄位給 Notion API */
+export function compactProps(obj: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {}
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v
+  }
+  return out
+}
+
+export async function createNotionPage(databaseId: string, properties: Record<string, any>) {
+  return notion.pages.create({
+    parent: { database_id: databaseId },
+    properties: properties as any,
+  })
+}
+
+export async function updateNotionPage(pageId: string, properties: Record<string, any>) {
+  return notion.pages.update({
+    page_id: pageId,
+    properties: properties as any,
+  })
+}
