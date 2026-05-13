@@ -86,15 +86,14 @@ export async function POST(request: NextRequest) {
 
       const insertRes = await client.query(
         `INSERT INTO viewings (
-          calendar_event_id, notion_buyer_id, notion_person_id, notion_buyer_need_id,
+          calendar_event_id, notion_person_id, notion_buyer_need_id,
           datetime, location,
           community_name, community_url, community_leju_url,
           colleague_name, colleague_phone, note
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id, created_at`,
         [
           calendarEventId,
-          ids.knownAsBuyer || ids.knownAsPerson ? ids.buyerNotionId : null, // 兩端皆未知時舊欄位留空
           ids.personId,
           ids.buyerNeedId,
           datetime,

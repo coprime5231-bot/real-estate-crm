@@ -28,14 +28,14 @@ export async function POST(
     const buyerPageId = ids.buyerNotionId // 給 Notion API 用
     const personIdForPg = ids.personId // 給 PG INSERT 用
 
-    // Step 1: PG INSERT（必做、Phase 4.1c dual-write）
+    // Step 1: PG INSERT（必做、Phase 4.5 person-only write）
     let conversation
     try {
       const insertRes = await pool.query(
-        `INSERT INTO conversations (notion_buyer_id, notion_person_id, date, content)
-         VALUES ($1, $2, CURRENT_DATE, $3)
-         RETURNING id, notion_buyer_id, notion_person_id, date, content, created_at, updated_at`,
-        [ids.knownAsBuyer || ids.knownAsPerson ? buyerPageId : null, personIdForPg, content]
+        `INSERT INTO conversations (notion_person_id, date, content)
+         VALUES ($1, CURRENT_DATE, $2)
+         RETURNING id, notion_person_id, date, content, created_at, updated_at`,
+        [personIdForPg, content]
       )
       conversation = insertRes.rows[0]
     } catch (error: any) {

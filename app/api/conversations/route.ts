@@ -24,14 +24,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'content 不可為空' }, { status: 400 })
     }
 
-    // Phase 4.1c/4.2 dual-write
+    // Phase 4.5：寫 person-only、為 DROP COLUMN 準備
     const ids = await resolveBothIds(notionBuyerId)
 
     const res = await pool.query(
-      `INSERT INTO conversations (notion_buyer_id, notion_person_id, date, content)
-       VALUES ($1, $2, CURRENT_DATE, $3)
-       RETURNING id, notion_buyer_id, notion_person_id, date, content, created_at, updated_at`,
-      [ids.knownAsBuyer || ids.knownAsPerson ? ids.buyerNotionId : null, ids.personId, content]
+      `INSERT INTO conversations (notion_person_id, date, content)
+       VALUES ($1, CURRENT_DATE, $2)
+       RETURNING id, notion_person_id, date, content, created_at, updated_at`,
+      [ids.personId, content]
     )
 
     return NextResponse.json({ conversation: res.rows[0] })

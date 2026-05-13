@@ -29,7 +29,7 @@ export async function PATCH(
       `UPDATE conversations
        SET content = $1, updated_at = NOW()
        WHERE id = $2
-       RETURNING id, notion_buyer_id, notion_person_id, date, content, created_at, updated_at`,
+       RETURNING id, notion_person_id, date, content, created_at, updated_at`,
       [content, id]
     )
 
