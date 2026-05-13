@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
           `UPDATE viewings
              SET opinion = $1
              WHERE calendar_event_id = $2
-               AND notion_buyer_id = $3`,
+               AND (notion_buyer_id = $3 OR notion_person_id = $3)`,
           [opinion, eventId, wb.pageId],
         )
         .catch((err) => {

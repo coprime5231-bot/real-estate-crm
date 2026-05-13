@@ -100,7 +100,9 @@ export type ViewingOpinion = 'liked' | 'disliked' | null
 export interface Viewing {
   id: number
   calendar_event_id: string
-  notion_buyer_id: string
+  notion_buyer_id: string | null
+  notion_person_id?: string | null
+  notion_buyer_need_id?: string | null
   datetime: string
   location: string
   community_name: string | null
@@ -115,7 +117,8 @@ export interface Viewing {
 
 export interface Conversation {
   id: number
-  notion_buyer_id: string
+  notion_buyer_id: string | null
+  notion_person_id?: string | null
   date: string
   content: string
   created_at: string

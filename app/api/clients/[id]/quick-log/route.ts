@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
 import { pool } from '@/lib/mba/db'
+import { lookupNewIds } from '@/lib/mba/id-map'
 
 /**
  * POST /api/clients/[id]/quick-log
@@ -22,14 +23,15 @@ export async function POST(
       return NextResponse.json({ error: '內容不可為空' }, { status: 400 })
     }
 
-    // Step 1: PG INSERT（必做）
+    // Step 1: PG INSERT（必做、Phase 4.1c dual-write）
+    const ids = await lookupNewIds(params.id)
     let conversation
     try {
       const insertRes = await pool.query(
-        `INSERT INTO conversations (notion_buyer_id, date, content)
-         VALUES ($1, CURRENT_DATE, $2)
-         RETURNING id, notion_buyer_id, date, content, created_at, updated_at`,
-        [params.id, content]
+        `INSERT INTO conversations (notion_buyer_id, notion_person_id, date, content)
+         VALUES ($1, $2, CURRENT_DATE, $3)
+         RETURNING id, notion_buyer_id, notion_person_id, date, content, created_at, updated_at`,
+        [ids.fromMap ? params.id : null, ids.personId, content]
       )
       conversation = insertRes.rows[0]
     } catch (error: any) {

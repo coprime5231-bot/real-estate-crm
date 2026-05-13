@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTimedEvent } from '@/lib/mba/google-calendar'
 import { pool } from '@/lib/mba/db'
+import { lookupNewIds } from '@/lib/mba/id-map'
 
 /**
  * POST /api/viewings
@@ -75,6 +76,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Phase 4.1c：dual-write、把舊 buyerId 翻成新 Person + BuyerNeed ID
+    const ids = await lookupNewIds(buyerId)
+
     // INSERT viewings + upsert communities（單一 transaction）
     const client = await pool.connect()
     try {
@@ -82,14 +86,17 @@ export async function POST(request: NextRequest) {
 
       const insertRes = await client.query(
         `INSERT INTO viewings (
-          calendar_event_id, notion_buyer_id, datetime, location,
+          calendar_event_id, notion_buyer_id, notion_person_id, notion_buyer_need_id,
+          datetime, location,
           community_name, community_url, community_leju_url,
           colleague_name, colleague_phone, note
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING id, created_at`,
         [
           calendarEventId,
-          buyerId,
+          ids.fromMap ? buyerId : null, // 沒命中 map 假設輸入已是 person ID、舊欄位留空
+          ids.personId,
+          ids.buyerNeedId,
           datetime,
           location.trim(),
           communityName?.trim() || null,
