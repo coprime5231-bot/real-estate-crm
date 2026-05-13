@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/mba/db'
-import { resolveBothIds } from '@/lib/mba/id-map'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,14 +23,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'content 不可為空' }, { status: 400 })
     }
 
-    // Phase 4.5：寫 person-only、為 DROP COLUMN 準備
-    const ids = await resolveBothIds(notionBuyerId)
-
     const res = await pool.query(
-      `INSERT INTO conversations (notion_person_id, date, content)
+      `INSERT INTO conversations (notion_buyer_id, date, content)
        VALUES ($1, CURRENT_DATE, $2)
-       RETURNING id, notion_person_id, date, content, created_at, updated_at`,
-      [ids.personId, content]
+       RETURNING id, notion_buyer_id, date, content, created_at, updated_at`,
+      [notionBuyerId, content]
     )
 
     return NextResponse.json({ conversation: res.rows[0] })

@@ -21,11 +21,11 @@ export async function GET(
   try {
     const res = await pool.query(
       `SELECT
-         id, calendar_event_id, notion_person_id, datetime, location,
+         id, calendar_event_id, notion_buyer_id, datetime, location,
          community_name, community_url, community_leju_url,
          colleague_name, colleague_phone, note, opinion, created_at
        FROM viewings
-       WHERE notion_person_id = $1
+       WHERE notion_buyer_id = $1
        ORDER BY
          CASE
            WHEN opinion = 'liked'    THEN 0

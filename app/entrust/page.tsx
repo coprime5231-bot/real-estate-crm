@@ -14,41 +14,53 @@ import {
   Phone,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import {
-  PersonData,
-  PropertyV2Data,
-  PropertyStatus,
-} from '@/lib/notion'
 
-type Stage = '開發信' | '追蹤' | '委託'
+// 跟 /api/dev/route.ts 對齊（不 import、避免 server-only 牽連）
+type DevStatus = '募集' | '追蹤' | '委託' | '成交' | '過期'
+
+interface DevProperty {
+  id: string
+  name: string
+  owner?: string
+  address?: string
+  status?: DevStatus
+  closingDate?: string | null
+  expiry?: string | null
+  important?: string
+  ownerPhone?: string
+  price?: string
+  devLetter?: boolean
+  devProgress: string[]
+}
+
+type Tab = '開發信' | '追蹤' | '委託'
 type DevLetterFilter = 'pending' | 'sent'
 
-const STAGES: { key: Stage; label: string; nextStage?: Stage }[] = [
-  { key: '開發信', label: '開發信', nextStage: '追蹤' },
-  { key: '追蹤', label: '追蹤', nextStage: '委託' },
-  { key: '委託', label: '委託' },
-]
+// UI tab label ↔ Notion status select value
+const TAB_TO_STATUS: Record<Tab, DevStatus> = {
+  '開發信': '募集',
+  '追蹤': '追蹤',
+  '委託': '委託',
+}
+const NEXT_TAB: Partial<Record<Tab, Tab>> = {
+  '開發信': '追蹤',
+  '追蹤': '委託',
+}
 
 function PropertyRow({
   prop,
-  personMap,
-  stage,
+  tab,
   onPatch,
   onPromote,
   pending,
 }: {
-  prop: PropertyV2Data
-  personMap: Map<string, PersonData>
-  stage: Stage
-  onPatch: (id: string, patch: Partial<PropertyV2Data>) => Promise<void>
-  onPromote: (id: string, next: Stage) => Promise<void>
+  prop: DevProperty
+  tab: Tab
+  onPatch: (id: string, patch: Partial<DevProperty>) => Promise<void>
+  onPromote: (id: string, next: Tab) => Promise<void>
   pending: boolean
 }) {
-  const owners = prop.ownerIds.map((id) => personMap.get(id)).filter(Boolean) as PersonData[]
-  const ownerNames = owners.map((p) => p.name).join('、') || '—'
-  const ownerPhones = owners.map((p) => p.phone).filter(Boolean).join('、')
-  const stageMeta = STAGES.find((s) => s.key === stage)
-  const next = stageMeta?.nextStage
+  const next = NEXT_TAB[tab]
   const expired = prop.expiry ? new Date(prop.expiry).getTime() < Date.now() : false
 
   return (
@@ -66,10 +78,10 @@ function PropertyRow({
             <div className="text-xs text-slate-400 mt-0.5 truncate">📍 {prop.address}</div>
           )}
           <div className="text-xs text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
-            <span>屋主：{ownerNames}</span>
-            {ownerPhones && (
+            {prop.owner && <span>屋主：{prop.owner}</span>}
+            {prop.ownerPhone && (
               <span className="flex items-center gap-1 text-slate-500">
-                <Phone size={11} /> {ownerPhones}
+                <Phone size={11} /> {prop.ownerPhone}
               </span>
             )}
             {prop.expiry && (
@@ -78,7 +90,7 @@ function PropertyRow({
               </span>
             )}
           </div>
-          {stage === '追蹤' && prop.devProgress.length > 0 && (
+          {tab === '追蹤' && prop.devProgress.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
               {prop.devProgress.map((p) => (
                 <span
@@ -90,7 +102,7 @@ function PropertyRow({
               ))}
             </div>
           )}
-          {stage === '委託' && prop.important && (
+          {tab === '委託' && prop.important && (
             <div className="mt-1 text-xs text-amber-300/80 bg-amber-950/30 border border-amber-900/40 rounded px-2 py-1">
               ⚠ {prop.important}
             </div>
@@ -98,7 +110,7 @@ function PropertyRow({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {stage === '開發信' && (
+          {tab === '開發信' && (
             <button
               onClick={() => onPatch(prop.id, { devLetter: !prop.devLetter })}
               disabled={pending}
@@ -130,33 +142,21 @@ function PropertyRow({
 }
 
 export default function EntrustPage() {
-  const [stage, setStage] = useState<Stage>('開發信')
+  const [tab, setTab] = useState<Tab>('開發信')
   const [devLetterFilter, setDevLetterFilter] = useState<DevLetterFilter>('pending')
-  const [properties, setProperties] = useState<PropertyV2Data[]>([])
-  const [people, setPeople] = useState<PersonData[]>([])
+  const [properties, setProperties] = useState<DevProperty[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
-
-  const personMap = useMemo(() => {
-    const m = new Map<string, PersonData>()
-    for (const p of people) m.set(p.id, p)
-    return m
-  }, [people])
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [propRes, peopleRes] = await Promise.all([
-        fetch('/api/properties-v2?activeOnly=1'),
-        fetch('/api/people'),
-      ])
-      if (!propRes.ok) throw new Error(`物件 ${propRes.status}`)
-      if (!peopleRes.ok) throw new Error(`人物 ${peopleRes.status}`)
-      const [props, ppl] = await Promise.all([propRes.json(), peopleRes.json()])
-      setProperties(props)
-      setPeople(ppl)
+      const res = await fetch('/api/dev?activeOnly=1')
+      if (!res.ok) throw new Error(`${res.status}`)
+      const data = (await res.json()) as DevProperty[]
+      setProperties(data)
     } catch (e: any) {
       setError(e?.message || '載入失敗')
     } finally {
@@ -169,31 +169,41 @@ export default function EntrustPage() {
   }, [loadData])
 
   const filtered = useMemo(() => {
-    let list = properties.filter((p) => p.status === stage)
-    if (stage === '開發信') {
+    const want = TAB_TO_STATUS[tab]
+    let list = properties.filter((p) => p.status === want)
+    if (tab === '開發信') {
       list = list.filter((p) =>
         devLetterFilter === 'sent' ? p.devLetter === true : !p.devLetter
       )
     }
     return list
-  }, [properties, stage, devLetterFilter])
+  }, [properties, tab, devLetterFilter])
 
   const counts = useMemo(() => {
-    const c: Record<Stage, number> = { '開發信': 0, '追蹤': 0, '委託': 0 }
+    const c: Record<Tab, number> = { '開發信': 0, '追蹤': 0, '委託': 0 }
     for (const p of properties) {
-      if (p.status && c[p.status as Stage] !== undefined) c[p.status as Stage]++
+      for (const t of Object.keys(TAB_TO_STATUS) as Tab[]) {
+        if (p.status === TAB_TO_STATUS[t]) c[t]++
+      }
     }
     return c
   }, [properties])
 
   const patchProperty = useCallback(
-    async (id: string, patch: Partial<PropertyV2Data>) => {
+    async (id: string, patch: Partial<DevProperty>) => {
       setPendingId(id)
       try {
-        const res = await fetch('/api/properties-v2', {
+        const apiPatch: any = {}
+        if (patch.devLetter !== undefined) apiPatch.devLetter = patch.devLetter
+        if (patch.status !== undefined) apiPatch.status = patch.status
+        if (patch.closingDate !== undefined) apiPatch.closingDate = patch.closingDate
+        if (patch.expiry !== undefined) apiPatch.expiry = patch.expiry
+        if (patch.important !== undefined) apiPatch.important = patch.important
+
+        const res = await fetch('/api/dev', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, ...patch }),
+          body: JSON.stringify({ id, ...apiPatch }),
         })
         if (!res.ok) throw new Error(`PATCH ${res.status}`)
         setProperties((prev) =>
@@ -208,9 +218,9 @@ export default function EntrustPage() {
     []
   )
 
-  const promoteStage = useCallback(
-    async (id: string, next: Stage) => {
-      await patchProperty(id, { status: next as PropertyStatus })
+  const promote = useCallback(
+    async (id: string, next: Tab) => {
+      await patchProperty(id, { status: TAB_TO_STATUS[next] })
       toast.success(`已升級到「${next}」`)
     },
     [patchProperty]
@@ -222,7 +232,7 @@ export default function EntrustPage() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-5">
           <FileText className="text-indigo-400" size={26} />
-          <h1 className="text-xl font-bold">委託管理</h1>
+          <h1 className="text-xl font-bold">開發</h1>
           <button
             onClick={loadData}
             disabled={loading}
@@ -232,26 +242,26 @@ export default function EntrustPage() {
           </button>
         </div>
 
-        {/* Stage tabs */}
+        {/* Tabs */}
         <div className="flex gap-1 mb-4 border-b border-slate-800">
-          {STAGES.map((s) => (
+          {(Object.keys(TAB_TO_STATUS) as Tab[]).map((t) => (
             <button
-              key={s.key}
-              onClick={() => setStage(s.key)}
+              key={t}
+              onClick={() => setTab(t)}
               className={`px-4 py-2 text-sm border-b-2 transition-colors ${
-                stage === s.key
+                tab === t
                   ? 'border-indigo-500 text-white'
                   : 'border-transparent text-slate-500 hover:text-slate-300'
               }`}
             >
-              {s.label}
-              <span className="ml-1.5 text-xs text-slate-500">{counts[s.key]}</span>
+              {t}
+              <span className="ml-1.5 text-xs text-slate-500">{counts[t]}</span>
             </button>
           ))}
         </div>
 
         {/* 開發信 sub-filter */}
-        {stage === '開發信' && (
+        {tab === '開發信' && (
           <div className="flex gap-2 mb-3">
             <button
               onClick={() => setDevLetterFilter('pending')}
@@ -291,7 +301,7 @@ export default function EntrustPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-12 text-slate-500 text-sm">
-            目前沒有「{stage}{stage === '開發信' ? (devLetterFilter === 'sent' ? '・已寄' : '・待寄') : ''}」物件
+            目前沒有「{tab}{tab === '開發信' ? (devLetterFilter === 'sent' ? '・已寄' : '・待寄') : ''}」物件
           </div>
         ) : (
           <div>
@@ -299,10 +309,9 @@ export default function EntrustPage() {
               <PropertyRow
                 key={p.id}
                 prop={p}
-                personMap={personMap}
-                stage={stage}
+                tab={tab}
                 onPatch={patchProperty}
-                onPromote={promoteStage}
+                onPromote={promote}
                 pending={pendingId === p.id}
               />
             ))}

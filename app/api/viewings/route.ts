@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTimedEvent } from '@/lib/mba/google-calendar'
 import { pool } from '@/lib/mba/db'
-import { resolveBothIds } from '@/lib/mba/id-map'
 
 /**
  * POST /api/viewings
@@ -43,11 +42,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Phase 4.2：先 resolve、後續 calendar URL 跟 PG INSERT 都用到
-    const ids = await resolveBothIds(buyerId)
-
-    // 建 Google Calendar 事件（URL 指向舊買方 Notion 頁、保留向後相容）
-    const buyerNotionUrl = `https://www.notion.so/${String(ids.buyerNotionId).replace(/-/g, '')}`
+    // 建 Google Calendar 事件
+    const buyerNotionUrl = `https://www.notion.so/${String(buyerId).replace(/-/g, '')}`
     // 標題只含買方與社區名；地址走 location 欄位（📍），不進標題。
     const trimmedCommunity = communityName?.trim() || ''
     const summary = trimmedCommunity
@@ -79,23 +75,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // INSERT viewings + upsert communities（單一 transaction、用上面已 resolve 的 ids）
+    // INSERT viewings + upsert communities（單一 transaction）
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
 
       const insertRes = await client.query(
         `INSERT INTO viewings (
-          calendar_event_id, notion_person_id, notion_buyer_need_id,
-          datetime, location,
+          calendar_event_id, notion_buyer_id, datetime, location,
           community_name, community_url, community_leju_url,
           colleague_name, colleague_phone, note
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING id, created_at`,
         [
           calendarEventId,
-          ids.personId,
-          ids.buyerNeedId,
+          buyerId,
           datetime,
           location.trim(),
           communityName?.trim() || null,

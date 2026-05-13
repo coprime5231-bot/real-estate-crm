@@ -1,7 +1,6 @@
 // 儲存路徑：app/api/clients/[id]/todos/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
-import { resolveBothIds } from '@/lib/mba/id-map'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,10 +29,7 @@ export async function GET(
     const titleProp = await getTitlePropertyName(todoDbId)
     // G22 語意：待辦=true = done、false = pending。?待辦=false → 只列 pending
     const pendingOnly = request.nextUrl.searchParams.get('待辦') === 'false'
-    // Phase 4.2：input id 可能是新 person ID、todos 仍走舊買方 relation
-    const idsResolved = await resolveBothIds(params.id)
-    const buyerPageId = idsResolved.buyerNotionId
-    const buyerFilter = { property: '🤑 買方', relation: { contains: buyerPageId } }
+    const buyerFilter = { property: '🤑 買方', relation: { contains: params.id } }
     const filter: any = pendingOnly
       ? { and: [buyerFilter, { property: '待辦', checkbox: { equals: false } }] }
       : buyerFilter
@@ -75,12 +71,9 @@ export async function POST(
     const title = (body.title || '').trim()
     if (!title) return NextResponse.json({ error: '標題不可為空' }, { status: 400 })
     const titleProp = await getTitlePropertyName(todoDbId)
-    // Phase 4.2：input id 可能是新 person ID、todos 仍 relation 到舊買方頁
-    const idsResolved = await resolveBothIds(params.id)
-    const buyerPageId = idsResolved.buyerNotionId
     const properties: any = {
       [titleProp]: { title: [{ text: { content: title } }] },
-      '🤑 買方': { relation: [{ id: buyerPageId }] },
+      '🤑 買方': { relation: [{ id: params.id }] },
       '待辦': { checkbox: false },
     }
     if (body.priority) {
