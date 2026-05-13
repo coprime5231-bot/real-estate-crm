@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { Trash2 } from 'lucide-react'
 import type { Conversation } from '@/lib/types'
 
 interface Props {
   conversation: Conversation
   onUpdate: (patch: Partial<Conversation>) => void
+  onDelete?: () => void
 }
 
 function formatMonthDay(dateStr: string): string {
@@ -15,10 +17,11 @@ function formatMonthDay(dateStr: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-export default function ConversationCard({ conversation, onUpdate }: Props) {
+export default function ConversationCard({ conversation, onUpdate, onDelete }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(conversation.content)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -69,10 +72,38 @@ export default function ConversationCard({ conversation, onUpdate }: Props) {
     }
   }
 
+  const handleDelete = async () => {
+    if (deleting) return
+    if (!window.confirm('確定刪除此筆洽談？')) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error('DELETE failed')
+      onDelete?.()
+      toast.success('已刪除')
+    } catch (err: any) {
+      console.error('delete conversation failed:', err)
+      toast.error('刪除失敗、請重試')
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="border-2 border-orange-500 rounded-lg p-4">
-      <div className="text-sm text-orange-400 font-medium mb-2">
-        {formatMonthDay(conversation.date)}  📞 洽談
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm text-orange-400 font-medium">
+          {formatMonthDay(conversation.date)}  📞 洽談
+        </div>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="text-slate-500 hover:text-red-400 disabled:opacity-40 transition-colors p-1"
+          title="刪除此筆洽談"
+        >
+          <Trash2 size={14} />
+        </button>
       </div>
 
       {editing ? (

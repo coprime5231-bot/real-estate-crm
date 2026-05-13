@@ -69,6 +69,10 @@ export default function ClientViewingsTab({ clientId }: Props) {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
   }
 
+  const handleConversationDelete = (id: number) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id))
+  }
+
   if (loading) {
     return (
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 text-center text-sm text-slate-500">
@@ -116,6 +120,7 @@ export default function ClientViewingsTab({ clientId }: Props) {
             key={`c-${card.data.id}`}
             conversation={card.data}
             onUpdate={(patch) => handleConversationUpdate(card.data.id, patch)}
+            onDelete={() => handleConversationDelete(card.data.id)}
           />
         )
       )}

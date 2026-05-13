@@ -9,6 +9,10 @@ lerna-debug.log*
 # Next.js
 .next/
 out/
+tsconfig.tsbuildinfo
+
+# Migration / diagnostic outputs
+outputs/
 
 # Production
 build/

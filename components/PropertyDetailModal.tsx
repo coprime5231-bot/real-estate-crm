@@ -10,6 +10,7 @@ export interface DevProperty {
   name: string
   owner?: string
   address?: string
+  householdAddress?: string
   status?: DevStatus
   closingDate?: string | null
   expiry?: string | null
@@ -17,6 +18,8 @@ export interface DevProperty {
   ownerPhone?: string
   ownerGrade?: string
   price?: string
+  objectLetter?: string
+  householdLetter?: string
   devLetter?: boolean
   devProgress: string[]
 }

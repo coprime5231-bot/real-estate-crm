@@ -27,6 +27,9 @@ import {
   MapPin,
   Loader2,
   Award,
+  Copy,
+  Undo2,
+  FileDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Client, Grade, SLAStatus, ImportantItem, TodoItem, Block } from '@/lib/types'
@@ -37,6 +40,7 @@ import DateTimePopover, { formatTodayISO, computeDefaultTime } from '@/component
 import CommunityAutocomplete from '@/components/CommunityAutocomplete'
 import ClientBasicInfoTab from '@/components/ClientBasicInfoTab'
 import ClientViewingsTab from '@/components/ClientViewingsTab'
+import BlockItem from '@/components/BlockItem'
 import PropertyDetailModal, { DevProperty, DevStatus } from '@/components/PropertyDetailModal'
 
 type Tab = 'marketing' | 'entrust' | 'closed' | 'videos' | 'ai'
@@ -185,11 +189,18 @@ export default function MarketingPage() {
   // === A1. 頂部收合 ===
   // 初值固定為 false，實際值在 mount 後用 effect 從 localStorage 補讀，
   // 否則 SSR(false) 與 CSR(localStorage) 不一致會觸發 React #418/#423 hydration 錯誤。
-  const [importantCollapsed, setImportantCollapsed] = useState(false)
-  const [todoCollapsed, setTodoCollapsed] = useState(false)
+  const [dashboardCollapsed, setDashboardCollapsed] = useState(false)
   useEffect(() => {
-    setImportantCollapsed(localStorage.getItem('crm.topBar.importantCollapsed') === 'true')
-    setTodoCollapsed(localStorage.getItem('crm.topBar.todoCollapsed') === 'true')
+    // 新 key 優先、舊兩個 key 任一是 true 也算收合（向後相容）
+    const v = localStorage.getItem('crm.topBar.collapsed')
+    if (v !== null) {
+      setDashboardCollapsed(v === 'true')
+    } else {
+      const legacy =
+        localStorage.getItem('crm.topBar.importantCollapsed') === 'true' ||
+        localStorage.getItem('crm.topBar.todoCollapsed') === 'true'
+      setDashboardCollapsed(legacy)
+    }
   }, [])
 
   // === A2. 頂部快速輸入 ===
@@ -236,6 +247,14 @@ export default function MarketingPage() {
   const [propertyPendingId, setPropertyPendingId] = useState<string | null>(null)
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null)
   const [propertyModalOpen, setPropertyModalOpen] = useState(false)
+  // 委託 tab 右側 sub-tab（鏡像行銷的 detailTab）
+  type EntrustDetailTab = 'latest' | 'basic' | 'records'
+  const [entrustDetailTab, setEntrustDetailTab] = useState<EntrustDetailTab>('latest')
+  // 開發信「已寄出」按下時的 fade-to-grey 動畫狀態
+  const [fadingDevLetters, setFadingDevLetters] = useState<Set<string>>(new Set())
+  // 開發信「待寄」勾選 ID（產生標籤用）
+  const [selectedDevLetterIds, setSelectedDevLetterIds] = useState<Set<string>>(new Set())
+  const [generatingLabels, setGeneratingLabels] = useState(false)
 
   // ===================== 成交客戶 tab 狀態 =====================
   const [closedProperties, setClosedProperties] = useState<DevProperty[]>([])
@@ -384,6 +403,56 @@ export default function MarketingPage() {
     [patchProperty]
   )
 
+  // 開發信「已寄出」: 先 fade 300ms、再實際 patch → 卡片自動從待寄消失
+  const handleMarkDevLetterSent = useCallback(
+    (id: string) => {
+      setFadingDevLetters((prev) => {
+        const next = new Set(prev)
+        next.add(id)
+        return next
+      })
+      // 從產生標籤勾選列表也移除
+      setSelectedDevLetterIds((prev) => {
+        if (!prev.has(id)) return prev
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      window.setTimeout(() => {
+        patchProperty(id, { devLetter: true })
+          .catch(() => {})
+          .finally(() => {
+            setFadingDevLetters((prev) => {
+              const next = new Set(prev)
+              next.delete(id)
+              return next
+            })
+          })
+      }, 300)
+    },
+    [patchProperty]
+  )
+
+  // 切換 sub-tab / pending↔sent 時清空產生標籤勾選
+  useEffect(() => {
+    setSelectedDevLetterIds(new Set())
+  }, [entrustSubTab, entrustDevLetterFilter])
+
+  // 一筆 property 會產幾張 label：直接看 Notion「物件地址」「戶藉地址」兩個欄位
+  // letter 內容不參與判斷（只是給人複製用）。戶藉欄位是「同」「同上」等視為等同物件
+  const labelCountFor = useCallback((prop: DevProperty): number => {
+    const sameMarkers = ['同', '同上', '同物件地址', '同物件', '同地址']
+    const addr = (prop.address || '').trim()
+    let h = (prop.householdAddress || '').trim()
+    if (sameMarkers.includes(h)) h = ''
+    if (!addr && !h) return 0
+    if (!addr || !h) return 1
+    if (addr.replace(/\s+/g, '') === h.replace(/\s+/g, '')) return 1
+    return 2
+  }, [])
+
+  // totalSelectedLabels / handleGenerateLabels 定義在 filteredProperties 之後
+
   const selectedProperty = useMemo(
     () =>
       properties.find((p) => p.id === selectedPropertyId) ||
@@ -428,6 +497,69 @@ export default function MarketingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [properties])
 
+  // 產生標籤：勾選總 label 數 + 下載 handler
+  const totalSelectedLabels = useMemo(() => {
+    let n = 0
+    for (const p of filteredProperties) {
+      if (selectedDevLetterIds.has(p.id)) n += labelCountFor(p)
+    }
+    return n
+  }, [filteredProperties, selectedDevLetterIds, labelCountFor])
+
+  function formatLabelCounter(total: number): string {
+    if (total === 0) return '0/6'
+    const full = Math.floor(total / 6)
+    const rem = total % 6
+    if (full === 0) return `${rem}/6`
+    if (rem === 0) return `${full}頁`
+    return `${full}頁 ${rem}/6`
+  }
+
+  const handleGenerateLabels = useCallback(async () => {
+    const ids = Array.from(selectedDevLetterIds).filter((id) =>
+      filteredProperties.find((p) => p.id === id)
+    )
+    if (ids.length === 0) {
+      toast.error('請先勾選物件')
+      return
+    }
+    setGeneratingLabels(true)
+    try {
+      const res = await fetch('/api/labels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyIds: ids }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j?.error || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const cd = res.headers.get('content-disposition') || ''
+      let fname = 'labels.docx'
+      const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="([^"]+)"/i)
+      if (m) {
+        try { fname = decodeURIComponent(m[1]) } catch { fname = m[1] }
+      }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fname
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success(`已下載 ${fname}`)
+      // 下載成功後自動把這些物件標記為 已寄出 → 切到「已寄留底」
+      for (const id of ids) {
+        handleMarkDevLetterSent(id)
+      }
+      setSelectedDevLetterIds(new Set())
+    } catch (e: any) {
+      toast.error(`產生標籤失敗：${e?.message || e}`)
+    } finally {
+      setGeneratingLabels(false)
+    }
+  }, [selectedDevLetterIds, filteredProperties, handleMarkDevLetterSent])
+
   const openPropertyModal = (id: string) => {
     setSelectedPropertyId(id)
     setPropertyModalOpen(true)
@@ -462,19 +594,11 @@ export default function MarketingPage() {
     }
   }, [selectedClientId, fetchClientDetail])
 
-  // === A1. 收合 localStorage 同步 ===
-  const toggleImportantCollapsed = useCallback(() => {
-    setImportantCollapsed((prev) => {
+  // === A1. 收合 localStorage 同步（一鍵同收重要事項 + 待辦） ===
+  const toggleDashboardCollapsed = useCallback(() => {
+    setDashboardCollapsed((prev) => {
       const next = !prev
-      localStorage.setItem('crm.topBar.importantCollapsed', String(next))
-      return next
-    })
-  }, [])
-
-  const toggleTodoCollapsed = useCallback(() => {
-    setTodoCollapsed((prev) => {
-      const next = !prev
-      localStorage.setItem('crm.topBar.todoCollapsed', String(next))
+      localStorage.setItem('crm.topBar.collapsed', String(next))
       return next
     })
   }, [])
@@ -1227,6 +1351,14 @@ export default function MarketingPage() {
               <span>🎂 今日生日</span>
               <span className="font-bold">({todayBirthdayCount})</span>
             </button>
+            <button
+              onClick={toggleDashboardCollapsed}
+              className="ml-auto flex items-center gap-1.5 p-1.5 border border-slate-600 hover:border-indigo-500 bg-slate-900 text-slate-300 hover:text-indigo-400 rounded transition-colors"
+              aria-label={dashboardCollapsed ? '展開重要事項與待辦' : '收合重要事項與待辦'}
+              title={dashboardCollapsed ? '展開重要事項與待辦' : '收合重要事項與待辦'}
+            >
+              {dashboardCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+            </button>
           </div>
         </div>
 
@@ -1258,17 +1390,6 @@ export default function MarketingPage() {
                   align="right"
                   title="重要事項日期時間"
                 />
-                <button
-                  onClick={toggleImportantCollapsed}
-                  className="p-1.5 border border-slate-600 hover:border-indigo-500 bg-slate-900 text-slate-300 hover:text-indigo-400 rounded transition-colors shrink-0"
-                  aria-label={importantCollapsed ? '展開' : '收合'}
-                  title={importantCollapsed ? '展開' : '收合'}
-                >
-                  {importantCollapsed
-                    ? <ChevronRight size={14} />
-                    : <ChevronDown size={14} />
-                  }
-                </button>
               </div>
 
               {selectedClientId && selectedClient && quickImportantBound && (
@@ -1284,7 +1405,7 @@ export default function MarketingPage() {
                 </div>
               )}
 
-              {!importantCollapsed && (
+              {!dashboardCollapsed && (
                 <div className="mt-3 max-h-36 overflow-y-auto">
                   {loadingDashboard ? (
                     <p className="text-xs text-slate-500">載入中...</p>
@@ -1345,17 +1466,6 @@ export default function MarketingPage() {
                   align="right"
                   title="待辦日期時間"
                 />
-                <button
-                  onClick={toggleTodoCollapsed}
-                  className="p-1.5 border border-slate-600 hover:border-indigo-500 bg-slate-900 text-slate-300 hover:text-indigo-400 rounded transition-colors shrink-0"
-                  aria-label={todoCollapsed ? '展開' : '收合'}
-                  title={todoCollapsed ? '展開' : '收合'}
-                >
-                  {todoCollapsed
-                    ? <ChevronRight size={14} />
-                    : <ChevronDown size={14} />
-                  }
-                </button>
               </div>
 
               {selectedClientId && selectedClient && quickTodoBound && (
@@ -1371,7 +1481,7 @@ export default function MarketingPage() {
                 </div>
               )}
 
-              {!todoCollapsed && (
+              {!dashboardCollapsed && (
                 <div className="mt-3">
                   {/* A3: 待辦列表（含動畫） */}
                   <div className="max-h-36 overflow-y-auto">
@@ -1934,7 +2044,7 @@ export default function MarketingPage() {
                       {clientBlocks.length === 0 ? (
                         <p className="text-xs text-slate-500">尚無進度記錄</p>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                           {[...clientBlocks]
                             .sort((a, b) => {
                               const at = a.createdTime ? new Date(a.createdTime).getTime() : 0
@@ -1942,9 +2052,18 @@ export default function MarketingPage() {
                               return at - bt
                             })
                             .map((block) => (
-                              <p key={block.id} className="text-sm text-slate-400">
-                                {block.text}
-                              </p>
+                              <BlockItem
+                                key={block.id}
+                                block={block}
+                                onUpdate={(patch) =>
+                                  setClientBlocks((prev) =>
+                                    prev.map((b) => (b.id === block.id ? { ...b, ...patch } : b))
+                                  )
+                                }
+                                onDelete={() =>
+                                  setClientBlocks((prev) => prev.filter((b) => b.id !== block.id))
+                                }
+                              />
                             ))}
                         </div>
                       )}
@@ -2038,47 +2157,56 @@ export default function MarketingPage() {
 
         {/* --- 委託 Tab --- */}
         {activeTab === 'entrust' && (
-          <div className="px-6 py-5">
-            {/* 三按鈕 + 搜尋欄 + 重新整理 */}
-            <div className="flex items-center gap-2 flex-wrap mb-4">
-              {(Object.keys(ENTRUST_TAB_TO_STATUS) as EntrustSubTab[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setEntrustSubTab(t)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border transition-colors ${
-                    entrustSubTab === t
-                      ? 'border-indigo-500 bg-indigo-600/30 text-white'
-                      : 'border-slate-700 text-slate-400 hover:text-white hover:border-slate-500'
-                  }`}
-                >
-                  {t}
-                  <span className="text-xs text-slate-500">{propertyCounts[t]}</span>
-                </button>
-              ))}
-
-              <div className="relative ml-2 flex-1 min-w-[200px] max-w-md">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <div>
+            {/* 篩選 chips + 搜尋 + 新增物件（鏡像行銷頂列） */}
+            <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-4 flex-wrap">
+              <div className="flex gap-2">
+                {(Object.keys(ENTRUST_TAB_TO_STATUS) as EntrustSubTab[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setEntrustSubTab(t)}
+                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                      entrustSubTab === t
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'
+                    }`}
+                  >
+                    {t}
+                    <span className="ml-1.5 text-xs opacity-70">{propertyCounts[t]}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 relative max-w-xs">
+                <Search className="absolute left-3 top-2 text-slate-500" size={16} />
                 <input
                   type="text"
+                  placeholder="搜尋物件 / 屋主 / 地址 / 電話"
                   value={entrustSearchTerm}
                   onChange={(e) => setEntrustSearchTerm(e.target.value)}
-                  placeholder="搜尋物件 / 屋主 / 地址 / 電話"
-                  className="w-full bg-slate-800/60 border border-slate-700 rounded pl-8 pr-3 py-1.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
-
               <button
                 onClick={fetchProperties}
                 disabled={propertiesLoading}
                 className="text-xs text-slate-400 hover:text-white px-2 py-1.5 rounded border border-slate-700 disabled:opacity-50"
+                title="重新整理"
               >
                 {propertiesLoading ? '載入中…' : '↻ 重新整理'}
+              </button>
+              <button
+                onClick={() => toast.info('新增物件功能尚未開放')}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors ml-auto"
+                title="新增物件"
+              >
+                <Plus size={14} />
+                新增物件
               </button>
             </div>
 
             {/* 開發信 sub-filter（待寄 / 已寄留底） */}
             {entrustSubTab === '開發信' && (
-              <div className="flex gap-2 mb-3">
+              <div className="px-6 py-2 border-b border-slate-700 flex gap-2">
                 <button
                   onClick={() => setEntrustDevLetterFilter('pending')}
                   className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded border transition-colors ${
@@ -2102,111 +2230,479 @@ export default function MarketingPage() {
               </div>
             )}
 
-            {/* Error */}
-            {propertiesError && (
-              <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-rose-950/40 border border-rose-900/60 rounded text-rose-300 text-sm">
-                <AlertTriangle size={14} />
-                {propertiesError}
+            {/* === 開發信 view：卡片版（待寄=完整卡、已寄留底=壓縮列） === */}
+            {entrustSubTab === '開發信' && (
+              <div className="px-6 py-5">
+                {propertiesError && (
+                  <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-rose-950/40 border border-rose-900/60 rounded text-rose-300 text-sm">
+                    <AlertTriangle size={14} />
+                    {propertiesError}
+                  </div>
+                )}
+                {propertiesLoading ? (
+                  <div className="flex items-center justify-center py-16 text-slate-500">
+                    <Loader2 className="animate-spin" size={20} />
+                  </div>
+                ) : filteredProperties.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-sm">
+                    {entrustSearchTerm
+                      ? '沒有符合搜尋的物件'
+                      : entrustDevLetterFilter === 'sent'
+                      ? '尚無已寄留底的物件'
+                      : '目前沒有待寄的開發信物件'}
+                  </div>
+                ) : entrustDevLetterFilter === 'pending' ? (
+                  /* 待寄：每筆物件一張卡片、物信戶信左右並排 */
+                  <div className="max-w-5xl mx-auto">
+                    {/* 產生標籤 action bar */}
+                    {(() => {
+                      const eligibleIds = filteredProperties.filter((p) => labelCountFor(p) > 0).map((p) => p.id)
+                      const allSelected = eligibleIds.length > 0 && eligibleIds.every((id) => selectedDevLetterIds.has(id))
+                      return (
+                        <div className="mb-3 flex items-center justify-between gap-3 bg-slate-800/40 border border-slate-700 rounded-lg px-4 py-2 flex-wrap">
+                          <div className="flex items-center gap-3 text-sm text-slate-300">
+                            <button
+                              onClick={() =>
+                                setSelectedDevLetterIds(allSelected ? new Set() : new Set(eligibleIds))
+                              }
+                              disabled={eligibleIds.length === 0}
+                              className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                                eligibleIds.length === 0
+                                  ? 'border-slate-700 text-slate-600 cursor-not-allowed'
+                                  : allSelected
+                                  ? 'border-indigo-500 bg-indigo-950/50 text-indigo-200 hover:bg-indigo-950/70'
+                                  : 'border-slate-600 text-slate-300 hover:border-indigo-500 hover:text-indigo-300'
+                              }`}
+                              title={allSelected ? '取消全選' : `全選 ${eligibleIds.length} 筆`}
+                            >
+                              {allSelected ? '取消全選' : '全選'}
+                            </button>
+                            <span>
+                              勾選 <span className="text-white font-medium">{selectedDevLetterIds.size}</span> 筆、共
+                              <span className="ml-1 px-1.5 py-0.5 rounded bg-indigo-950/60 text-indigo-300 font-mono text-xs">{formatLabelCounter(totalSelectedLabels)}</span>
+                              <span className="ml-1 text-xs text-slate-500">張標籤</span>
+                            </span>
+                          </div>
+                          <button
+                            onClick={handleGenerateLabels}
+                            disabled={totalSelectedLabels === 0 || generatingLabels}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                            title="產生 .docx 並下載"
+                          >
+                            <FileDown size={14} />
+                            {generatingLabels ? '產生中…' : '產生標籤'}
+                          </button>
+                        </div>
+                      )
+                    })()}
+                    <div className="space-y-3">
+                    {filteredProperties.map((prop) => {
+                      const isFading = fadingDevLetters.has(prop.id)
+                      const isSelected = selectedDevLetterIds.has(prop.id)
+                      const count = labelCountFor(prop)
+                      return (
+                      <div
+                        key={prop.id}
+                        className={`bg-slate-800/40 border rounded-lg overflow-hidden transition-all duration-300 ${
+                          isFading ? 'opacity-30 grayscale pointer-events-none border-slate-700' : isSelected ? 'border-indigo-500/60' : 'border-slate-700'
+                        }`}
+                      >
+                        {/* 卡片頭：checkbox + 張數 + 物件名 + 屋主 + 已寄出 + 物件地址 */}
+                        <div className="px-4 py-2 border-b border-slate-700 flex items-center gap-3 flex-wrap">
+                          <button
+                            onClick={() => {
+                              setSelectedDevLetterIds((prev) => {
+                                const next = new Set(prev)
+                                if (next.has(prop.id)) next.delete(prop.id)
+                                else next.add(prop.id)
+                                return next
+                              })
+                            }}
+                            disabled={count === 0}
+                            className={`transition-colors ${
+                              count === 0
+                                ? 'text-slate-700 cursor-not-allowed'
+                                : isSelected
+                                ? 'text-indigo-400 hover:text-indigo-300'
+                                : 'text-slate-500 hover:text-slate-300'
+                            }`}
+                            title={count === 0 ? '無物件地址、無法產生標籤' : isSelected ? '取消勾選' : '勾選'}
+                          >
+                            {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                          </button>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                              count === 2
+                                ? 'bg-amber-900/30 text-amber-300 border-amber-800/60'
+                                : count === 1
+                                ? 'bg-slate-700/50 text-slate-300 border-slate-600'
+                                : 'bg-slate-800/50 text-slate-500 border-slate-700'
+                            }`}
+                            title={count === 2 ? '物件地 + 戶藉地各一張' : count === 1 ? '物件地一張' : '無地址'}
+                          >
+                            {count} 張
+                          </span>
+                          <a
+                            href={`https://www.notion.so/${prop.id.replace(/-/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-base font-bold text-white hover:text-indigo-400 transition-colors truncate"
+                            title="開啟 Notion 頁面"
+                          >
+                            {prop.name}
+                          </a>
+                          {prop.owner && (
+                            <span className="text-sm text-slate-300">屋主：{prop.owner}</span>
+                          )}
+                        </div>
+                        {/* 物件 / 戶藉 兩列地址 */}
+                        <div className="px-4 py-2 space-y-1 text-sm">
+                          <div className="flex gap-2">
+                            <span className="text-slate-500 shrink-0 w-12">物件：</span>
+                            <span className="text-slate-300 whitespace-pre-wrap break-all">
+                              {prop.address || <span className="text-slate-600">（未填）</span>}
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <span className="text-slate-500 shrink-0 w-12">戶藉：</span>
+                            <span className="text-slate-300 whitespace-pre-wrap break-all">
+                              {prop.householdAddress || <span className="text-slate-600">（未填）</span>}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      )
+                    })}
+                    </div>
+                  </div>
+                ) : (
+                  /* 已寄留底：壓縮列、單行卡片 */
+                  <div className="space-y-1 max-w-4xl mx-auto">
+                    {filteredProperties.map((prop) => (
+                      <div
+                        key={prop.id}
+                        className="bg-slate-800/40 border border-slate-700 rounded px-3 py-2 flex items-center gap-3 flex-wrap text-sm hover:border-slate-500 transition-colors"
+                      >
+                        <a
+                          href={`https://www.notion.so/${prop.id.replace(/-/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-white hover:text-indigo-400 transition-colors truncate"
+                          title="開啟 Notion 頁面"
+                        >
+                          {prop.name}
+                        </a>
+                        {prop.owner && <span className="text-slate-400">屋主：{prop.owner}</span>}
+                        {prop.address && <span className="text-slate-500 truncate">{prop.address}</span>}
+                        <button
+                          onClick={() =>
+                            patchProperty(prop.id, { devLetter: false }).catch(() => {})
+                          }
+                          disabled={propertyPendingId === prop.id}
+                          className="ml-auto p-1 text-slate-500 hover:text-indigo-400 transition-colors"
+                          title="復原、移回待寄"
+                        >
+                          <Undo2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* List */}
-            {propertiesLoading ? (
-              <div className="flex items-center justify-center py-16 text-slate-500">
-                <Loader2 className="animate-spin" size={20} />
-              </div>
-            ) : filteredProperties.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 text-sm">
-                {entrustSearchTerm
-                  ? '沒有符合搜尋的物件'
-                  : `目前沒有「${entrustSubTab}${
-                      entrustSubTab === '開發信'
-                        ? entrustDevLetterFilter === 'sent' ? '・已寄' : '・待寄'
-                        : ''
-                    }」物件`}
-              </div>
-            ) : (
-              <div>
-                {filteredProperties.map((prop) => {
-                  const expired = prop.expiry ? new Date(prop.expiry).getTime() < Date.now() : false
-                  const isDevLetter = entrustSubTab === '開發信'
-                  return (
-                    <div
-                      key={prop.id}
-                      className="border border-slate-700 bg-slate-900/60 rounded-lg p-3 mb-2 hover:border-slate-500 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <button
-                          onClick={() => openPropertyModal(prop.id)}
-                          className="flex-1 min-w-0 text-left"
-                        >
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-white truncate">{prop.name}</span>
-                            {prop.price && <span className="text-amber-400 text-sm">{prop.price}</span>}
-                            {expired && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300">已過期</span>
+            {/* === 追蹤 / 委託 view：左右欄（鏡像行銷） === */}
+            {entrustSubTab !== '開發信' && (
+            <div className="flex" style={{ height: 'calc(100vh - 280px)', minHeight: '500px' }}>
+              {/* 左側列表 */}
+              <div className="w-[280px] shrink-0 border-r border-slate-700 overflow-y-auto">
+                {propertiesError && (
+                  <div className="m-3 flex items-center gap-2 px-3 py-2 bg-rose-950/40 border border-rose-900/60 rounded text-rose-300 text-sm">
+                    <AlertTriangle size={14} />
+                    {propertiesError}
+                  </div>
+                )}
+                {propertiesLoading ? (
+                  <div className="p-6 flex items-center justify-center text-slate-500">
+                    <Loader2 className="animate-spin" size={20} />
+                  </div>
+                ) : filteredProperties.length === 0 ? (
+                  <div className="p-6 text-center text-slate-500 text-sm">
+                    {entrustSearchTerm
+                      ? '沒有符合搜尋的物件'
+                      : `目前沒有「${entrustSubTab}」物件`}
+                  </div>
+                ) : (
+                  filteredProperties.map((prop) => {
+                    const isSelected = prop.id === selectedPropertyId && !propertyModalOpen
+                    const expired = prop.expiry ? new Date(prop.expiry).getTime() < Date.now() : false
+                    return (
+                      <div
+                        key={prop.id}
+                        onClick={() => {
+                          setSelectedPropertyId(prop.id)
+                          setEntrustDetailTab('latest')
+                        }}
+                        className={`px-4 py-3 cursor-pointer transition-all border-l-[3px] ${
+                          isSelected
+                            ? 'bg-indigo-900/20 border-l-indigo-500'
+                            : expired
+                            ? 'border-l-red-500/50 hover:bg-red-900/10'
+                            : 'border-l-transparent hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1 gap-2">
+                          <div className="font-medium text-white text-sm flex items-center gap-1.5 min-w-0 flex-1">
+                            <span className="truncate min-w-0">{prop.name}</span>
+                            {prop.price && (
+                              <span className="text-[11px] font-normal shrink-0 whitespace-nowrap text-amber-400">
+                                {prop.price}
+                              </span>
                             )}
                           </div>
-                          {prop.address && (
-                            <div className="text-xs text-slate-400 mt-0.5 truncate flex items-center gap-1">
-                              <MapPin size={11} /> {prop.address}
-                            </div>
+                          {expired && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-rose-900/50 text-rose-300 border-rose-700 shrink-0">
+                              過期
+                            </span>
                           )}
-                          <div className="text-xs text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
-                            {prop.owner && <span>屋主：{prop.owner}</span>}
-                            {prop.ownerPhone && (
-                              <span className="flex items-center gap-1 text-slate-500">
-                                <Phone size={11} /> {prop.ownerPhone}
-                              </span>
-                            )}
-                            {prop.expiry && (
-                              <span className="flex items-center gap-1 text-slate-500">
-                                <Calendar size={11} /> {prop.expiry}
-                              </span>
-                            )}
+                        </div>
+                        {prop.address && (
+                          <div className="text-xs text-slate-500 truncate">{prop.address}</div>
+                        )}
+                        {prop.owner && (
+                          <div className="text-xs text-slate-500 truncate">屋主：{prop.owner}</div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* 右側詳情面板 */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {!selectedProperty || selectedProperty.status === '成交' ? (
+                  <div className="flex items-center justify-center h-full text-slate-500">
+                    <div className="text-center">
+                      <FileText size={48} className="mx-auto mb-3 opacity-30" />
+                      <p>選擇左側物件查看詳情</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-6 pb-[200px] space-y-4">
+                    {/* 物件標頭 + 按鈕（鏡像行銷右側標頭） */}
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h2 className="text-xl font-bold text-white flex items-center gap-2 min-w-0">
+                            <span className="truncate">{selectedProperty.name}</span>
+                          </h2>
+                          {selectedProperty.ownerPhone && (
+                            <span className="text-sm text-slate-300 whitespace-nowrap">
+                              📱 {selectedProperty.ownerPhone}
+                            </span>
+                          )}
+                          {selectedProperty.owner && (
+                            <span className="text-sm text-slate-400 whitespace-nowrap">
+                              👤 {selectedProperty.owner}
+                            </span>
+                          )}
+                          {selectedProperty.expiry && (
+                            <span className="text-sm text-slate-400 whitespace-nowrap flex items-center gap-1">
+                              <Calendar size={14} />
+                              到期 {selectedProperty.expiry}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openPropertyModal(selectedProperty.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-sky-700 hover:bg-sky-600 text-white rounded-lg transition-colors"
+                          title="開啟詳細編輯"
+                        >
+                          <FileText size={14} />
+                          詳細編輯
+                        </button>
+                        <a
+                          href={`https://www.notion.so/${selectedProperty.id.replace(/-/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+                        >
+                          <ExternalLink size={14} />
+                          Notion
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Sub-tab 切換列（最新進度 / 基本資料 / 經營記錄卡） */}
+                    <div className="flex gap-1 border-b border-slate-700">
+                      {([
+                        { key: 'latest', label: '最新進度' },
+                        { key: 'basic', label: '基本資料' },
+                        { key: 'records', label: '經營記錄卡' },
+                      ] as const).map(({ key, label }) => (
+                        <button
+                          key={key}
+                          onClick={() => setEntrustDetailTab(key)}
+                          className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
+                            entrustDetailTab === key
+                              ? 'border-indigo-500 text-indigo-400'
+                              : 'border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-600'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {entrustDetailTab === 'basic' && (
+                      <div className="space-y-4">
+                        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-2 text-sm">
+                          <div className="flex gap-3">
+                            <span className="w-20 text-slate-500 shrink-0">屋主</span>
+                            <span className="text-slate-200">{selectedProperty.owner || '—'}</span>
                           </div>
-                          {entrustSubTab === '追蹤' && prop.devProgress.length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {prop.devProgress.map((dp) => (
-                                <span
-                                  key={dp}
-                                  className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700"
-                                >
-                                  {dp}
-                                </span>
+                          <div className="flex gap-3">
+                            <span className="w-20 text-slate-500 shrink-0">電話</span>
+                            <span className="text-slate-200">{selectedProperty.ownerPhone || '—'}</span>
+                          </div>
+                          <div className="flex gap-3">
+                            <span className="w-20 text-slate-500 shrink-0">等級</span>
+                            <span className="text-slate-200">{selectedProperty.ownerGrade || '—'}</span>
+                          </div>
+                          <div className="flex gap-3">
+                            <span className="w-20 text-slate-500 shrink-0">地址</span>
+                            <span className="text-slate-200">{selectedProperty.address || '—'}</span>
+                          </div>
+                          <div className="flex gap-3">
+                            <span className="w-20 text-slate-500 shrink-0">委託到期</span>
+                            <span className="text-slate-200">{selectedProperty.expiry || '—'}</span>
+                          </div>
+                          <div className="flex gap-3">
+                            <span className="w-20 text-slate-500 shrink-0">價格</span>
+                            <span className="text-slate-200">{selectedProperty.price || '—'}</span>
+                          </div>
+                          <div className="flex gap-3">
+                            <span className="w-20 text-slate-500 shrink-0">狀態</span>
+                            <span className="text-slate-200">{selectedProperty.status || '—'}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-500">完整編輯請點上方「詳細編輯」</p>
+                      </div>
+                    )}
+
+                    {entrustDetailTab === 'latest' && (
+                      <div className="space-y-4">
+                        {/* ① 重要事項（鏡像行銷「重要大事」、wiring 後續細修） */}
+                        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-sm font-semibold text-amber-400 flex items-center gap-2 shrink-0">
+                              <Star size={14} />
+                              重要事項
+                            </h3>
+                            <input
+                              type="text"
+                              placeholder="新增重要事項...（尚未串接）"
+                              disabled
+                              className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                            />
+                            <button
+                              disabled
+                              className="px-2.5 py-1 bg-amber-600 disabled:opacity-50 text-white text-sm rounded shrink-0"
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                          {selectedProperty.important ? (
+                            <div className="mt-3 text-xs text-amber-300/80 bg-amber-950/30 border border-amber-900/40 rounded px-2 py-1.5">
+                              ⚠ {selectedProperty.important}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500 mt-3">目前無重要事項</p>
+                          )}
+                        </div>
+
+                        {/* ② 待辦事項（skeleton、wiring 後續細修） */}
+                        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-sm font-semibold text-green-400 flex items-center gap-2 shrink-0">
+                              <CheckSquare size={14} />
+                              待辦事項
+                            </h3>
+                            <input
+                              type="text"
+                              placeholder="新增待辦...（尚未串接）"
+                              disabled
+                              className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                            />
+                            <button
+                              disabled
+                              className="px-2.5 py-1 bg-green-600 disabled:opacity-50 text-white text-sm rounded shrink-0"
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-3">目前無待辦事項</p>
+                        </div>
+
+                        {/* ③ 之前進度（沿用 devProgress） */}
+                        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                          <h3 className="text-sm font-semibold text-slate-400 mb-3 flex items-center gap-2">
+                            <Clock size={14} />
+                            之前進度
+                            {selectedProperty.devProgress.length > 0 && (
+                              <span className="text-xs text-slate-500 font-normal">({selectedProperty.devProgress.length})</span>
+                            )}
+                          </h3>
+                          {selectedProperty.devProgress.length === 0 ? (
+                            <p className="text-xs text-slate-500">尚無進度記錄</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {selectedProperty.devProgress.map((dp, i) => (
+                                <p key={`${dp}-${i}`} className="text-sm text-slate-400">{dp}</p>
                               ))}
                             </div>
                           )}
-                          {entrustSubTab === '委託' && prop.important && (
-                            <div className="mt-1 text-xs text-amber-300/80 bg-amber-950/30 border border-amber-900/40 rounded px-2 py-1">
-                              ⚠ {prop.important}
-                            </div>
-                          )}
-                        </button>
+                        </div>
 
-                        {/* 只在開發信 tab 保留「已寄」checkbox、不再有升級按鈕 */}
-                        {isDevLetter && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              patchProperty(prop.id, { devLetter: !prop.devLetter }).catch(() => {})
-                            }}
-                            disabled={propertyPendingId === prop.id}
-                            className={`p-1.5 rounded transition-colors shrink-0 ${
-                              prop.devLetter
-                                ? 'text-emerald-400 hover:text-emerald-300'
-                                : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                            title={prop.devLetter ? '已寄、點擊取消' : '未寄、點擊標記已寄'}
-                          >
-                            {prop.devLetter ? <CheckSquare size={18} /> : <Square size={18} />}
-                          </button>
-                        )}
+                        {/* ④ 目前進度（skeleton、wiring 後續細修） */}
+                        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                          <h3 className="text-sm font-semibold text-indigo-400 mb-3">目前進度</h3>
+                          <div className="flex flex-col gap-2">
+                            <textarea
+                              rows={4}
+                              placeholder="輸入進度（尚未串接）"
+                              disabled
+                              className="w-full min-h-[96px] max-h-48 resize-none bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50"
+                            />
+                            <button
+                              disabled
+                              className="self-end px-4 py-2 bg-indigo-600 disabled:opacity-50 text-white text-sm rounded"
+                            >
+                              送出
+                            </button>
+                          </div>
+                        </div>
+
                       </div>
-                    </div>
-                  )
-                })}
+                    )}
+
+                    {entrustDetailTab === 'records' && (
+                      <div className="space-y-4">
+                        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                          <h3 className="text-sm font-semibold text-slate-400 mb-3 flex items-center gap-2">
+                            <Clock size={14} />
+                            經營記錄卡
+                          </h3>
+                          <p className="text-xs text-slate-500">尚未串接、後續細修補上資料來源</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+            </div>
             )}
           </div>
         )}

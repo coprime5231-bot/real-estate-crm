@@ -2,9 +2,9 @@
  * 帶看意願 → 回寫買方 Notion page body
  *
  * 從 Calendar event description 抓買方 page UUID，append 一段
- * 「M/D HH:MM "〈社區名〉" 有興趣」
- * 「M/D HH:MM "〈社區名〉" 沒興趣」
- * 到該 page。社區名為空時整段省略（不寫空引號、不退回地址）。
+ * 「M/D 帶看 "〈社區名〉" 有興趣」
+ * 「M/D 帶看 "〈社區名〉" 沒興趣」
+ * 到該 page。社區名為空時帶看 + 引號略過、只留 M/D 跟興趣標籤。
  */
 
 import { extractPageId } from './notion-writeback'
@@ -33,6 +33,17 @@ export function formatTaipeiMdHm(iso: string): string {
   return `${month}/${day} ${m[3]}:${m[4]}`
 }
 
+/**
+ * 把 ISO 8601 字串轉成 Asia/Taipei 的 M/D（不帶時間）。
+ */
+export function formatTaipeiMd(iso: string): string {
+  const m = iso.match(/^\d{4}-(\d{2})-(\d{2})T/)
+  if (!m) return ''
+  const month = String(parseInt(m[1], 10))
+  const day = String(parseInt(m[2], 10))
+  return `${month}/${day}`
+}
+
 export interface ViewingWritebackOpts {
   interest: 'yes' | 'no'
   communityName: string | null
@@ -49,11 +60,11 @@ export async function handleViewingBuyerWriteback(
     return { success: false, pageId: null }
   }
 
-  const dt = formatTaipeiMdHm(opts.eventStartIso)
+  const dt = formatTaipeiMd(opts.eventStartIso)
   const trimmedCommunity = opts.communityName?.trim() || ''
   const tail = opts.interest === 'yes' ? '有興趣' : '沒興趣'
   const text = trimmedCommunity
-    ? `${dt} "${trimmedCommunity}" ${tail}`
+    ? `${dt} 帶看 "${trimmedCommunity}" ${tail}`
     : `${dt} ${tail}`
 
   try {
