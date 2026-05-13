@@ -4,6 +4,7 @@ import { VIEWING_SCORE } from '@/lib/mba/scoring'
 import { handleViewingBuyerWriteback } from '@/lib/mba/buyer-writeback'
 import { updateEventColor } from '@/lib/mba/google-calendar'
 import { refreshDailyStats } from '@/lib/mba/daily-stats'
+import { resolveBothIds } from '@/lib/mba/id-map'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -73,13 +74,15 @@ export async function POST(req: NextRequest) {
     // 影響 0 列靜默忽略、失敗只記 log、不回滾 Notion、不影響 MBA UI。
     if (wb?.success && wb.pageId) {
       const opinion = act === 'yes' ? 'liked' : 'disliked'
+      // Phase 4.3：wb.pageId 是 calendar URL 抓到的舊買方頁 id、翻成 person ID 後比對
+      const ids = await resolveBothIds(wb.pageId)
       await pool
         .query(
           `UPDATE viewings
              SET opinion = $1
              WHERE calendar_event_id = $2
-               AND (notion_buyer_id = $3 OR notion_person_id = $3)`,
-          [opinion, eventId, wb.pageId],
+               AND notion_person_id = $3`,
+          [opinion, eventId, ids.personId],
         )
         .catch((err) => {
           console.error('[viewing] sync viewings.opinion failed', err)

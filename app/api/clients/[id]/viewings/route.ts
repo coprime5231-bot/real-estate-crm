@@ -25,7 +25,7 @@ export async function GET(
          community_name, community_url, community_leju_url,
          colleague_name, colleague_phone, note, opinion, created_at
        FROM viewings
-       WHERE (notion_buyer_id = $1 OR notion_person_id = $1)
+       WHERE notion_person_id = $1
        ORDER BY
          CASE
            WHEN opinion = 'liked'    THEN 0
