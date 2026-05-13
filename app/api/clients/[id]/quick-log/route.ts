@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
 import { pool } from '@/lib/mba/db'
-import { lookupNewIds } from '@/lib/mba/id-map'
+import { resolveBothIds } from '@/lib/mba/id-map'
 
 /**
  * POST /api/clients/[id]/quick-log
@@ -23,15 +23,19 @@ export async function POST(
       return NextResponse.json({ error: '內容不可為空' }, { status: 400 })
     }
 
+    // Phase 4.2：input id 可能是 person ID 或 buyer ID、雙向 resolve
+    const ids = await resolveBothIds(params.id)
+    const buyerPageId = ids.buyerNotionId // 給 Notion API 用
+    const personIdForPg = ids.personId // 給 PG INSERT 用
+
     // Step 1: PG INSERT（必做、Phase 4.1c dual-write）
-    const ids = await lookupNewIds(params.id)
     let conversation
     try {
       const insertRes = await pool.query(
         `INSERT INTO conversations (notion_buyer_id, notion_person_id, date, content)
          VALUES ($1, $2, CURRENT_DATE, $3)
          RETURNING id, notion_buyer_id, notion_person_id, date, content, created_at, updated_at`,
-        [ids.fromMap ? params.id : null, ids.personId, content]
+        [ids.knownAsBuyer || ids.knownAsPerson ? buyerPageId : null, personIdForPg, content]
       )
       conversation = insertRes.rows[0]
     } catch (error: any) {
@@ -52,7 +56,7 @@ export async function POST(
     let notionAppendFailed = false
     try {
       const blockRes = await notion.blocks.children.append({
-        block_id: params.id,
+        block_id: buyerPageId,
         children: [
           {
             object: 'block',
@@ -77,7 +81,7 @@ export async function POST(
     let dateUpdateFailed = false
     try {
       await notion.pages.update({
-        page_id: params.id,
+        page_id: buyerPageId,
         properties: {
           '日期': { date: { start: newFollowUp } },
         },

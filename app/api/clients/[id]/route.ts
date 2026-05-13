@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
+import { resolveBothIds } from '@/lib/mba/id-map'
 
 export async function PATCH(
   request: NextRequest,
@@ -7,6 +8,10 @@ export async function PATCH(
 ) {
   try {
     const { id } = params
+    // Phase 4.2：input id 可能是新 person ID（從 /api/clients GET 翻譯後傳回）
+    // 此路由寫回舊買方 DB、用 buyerNotionId
+    const ids = await resolveBothIds(id)
+    const buyerPageId = ids.buyerNotionId
     const body = await request.json()
 
     const updateProperties: any = {}
@@ -104,7 +109,7 @@ export async function PATCH(
     }
 
     const response = await notion.pages.update({
-      page_id: id,
+      page_id: buyerPageId,
       properties: updateProperties,
     })
 

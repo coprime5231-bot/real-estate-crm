@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion, { extractText, extractSelectValue, BuyerData } from '@/lib/notion'
+import { pool } from '@/lib/mba/db'
 
 // 從 Notion multi_select 屬性取出 name 陣列
 function extractMultiSelect(prop: any): string[] {
@@ -92,6 +93,22 @@ export async function GET(request: NextRequest) {
       database_id: buyerDbId,
     })
 
+    // Phase 4.2: 一次撈 notion_id_map、把舊買方 page id 翻成新 Person ID
+    // 沒命中 map 的（新建客戶）保留原 buyer ID、backend 已 dual-read 相容
+    const buyerIds = response.results
+      .filter((p: any) => p.object === 'page')
+      .map((p: any) => p.id as string)
+    const idMap = new Map<string, string>()
+    if (buyerIds.length > 0) {
+      const mapRes = await pool.query<{ old_buyer_id: string; new_person_id: string }>(
+        'SELECT old_buyer_id, new_person_id FROM notion_id_map WHERE old_buyer_id = ANY($1)',
+        [buyerIds]
+      )
+      for (const row of mapRes.rows) {
+        idMap.set(row.old_buyer_id, row.new_person_id)
+      }
+    }
+
     const clients = response.results
       .filter((page: any) => page.object === 'page')
       .map((page: any) => {
@@ -123,8 +140,10 @@ export async function GET(request: NextRequest) {
         const daysSinceEdit = getDaysSinceEdit(lastEditedTime, createdTime)
         const slaStatus = getSLAStatus(grade, daysSinceEdit)
 
+        const translatedId = idMap.get(page.id) || page.id
         return {
-          id: page.id,
+          id: translatedId,
+          buyerNotionId: page.id, // 原始買方 DB page id、給仍需打 Notion API 的 path 用
           name: p['名稱']?.title?.[0]?.plain_text || '未命名',
           phone: phoneRaw || undefined,
           note: extractText(p['NOTE']?.rich_text || []),

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/mba/db'
-import { lookupNewIds } from '@/lib/mba/id-map'
+import { resolveBothIds } from '@/lib/mba/id-map'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,14 +24,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'content 不可為空' }, { status: 400 })
     }
 
-    // Phase 4.1c dual-write
-    const ids = await lookupNewIds(notionBuyerId)
+    // Phase 4.1c/4.2 dual-write
+    const ids = await resolveBothIds(notionBuyerId)
 
     const res = await pool.query(
       `INSERT INTO conversations (notion_buyer_id, notion_person_id, date, content)
        VALUES ($1, $2, CURRENT_DATE, $3)
        RETURNING id, notion_buyer_id, notion_person_id, date, content, created_at, updated_at`,
-      [ids.fromMap ? notionBuyerId : null, ids.personId, content]
+      [ids.knownAsBuyer || ids.knownAsPerson ? ids.buyerNotionId : null, ids.personId, content]
     )
 
     return NextResponse.json({ conversation: res.rows[0] })

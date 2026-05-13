@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTimedEvent } from '@/lib/mba/google-calendar'
 import { pool } from '@/lib/mba/db'
-import { lookupNewIds } from '@/lib/mba/id-map'
+import { resolveBothIds } from '@/lib/mba/id-map'
 
 /**
  * POST /api/viewings
@@ -43,8 +43,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 建 Google Calendar 事件
-    const buyerNotionUrl = `https://www.notion.so/${String(buyerId).replace(/-/g, '')}`
+    // Phase 4.2：先 resolve、後續 calendar URL 跟 PG INSERT 都用到
+    const ids = await resolveBothIds(buyerId)
+
+    // 建 Google Calendar 事件（URL 指向舊買方 Notion 頁、保留向後相容）
+    const buyerNotionUrl = `https://www.notion.so/${String(ids.buyerNotionId).replace(/-/g, '')}`
     // 標題只含買方與社區名；地址走 location 欄位（📍），不進標題。
     const trimmedCommunity = communityName?.trim() || ''
     const summary = trimmedCommunity
@@ -76,10 +79,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Phase 4.1c：dual-write、把舊 buyerId 翻成新 Person + BuyerNeed ID
-    const ids = await lookupNewIds(buyerId)
-
-    // INSERT viewings + upsert communities（單一 transaction）
+    // INSERT viewings + upsert communities（單一 transaction、用上面已 resolve 的 ids）
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
         RETURNING id, created_at`,
         [
           calendarEventId,
-          ids.fromMap ? buyerId : null, // 沒命中 map 假設輸入已是 person ID、舊欄位留空
+          ids.knownAsBuyer || ids.knownAsPerson ? ids.buyerNotionId : null, // 兩端皆未知時舊欄位留空
           ids.personId,
           ids.buyerNeedId,
           datetime,

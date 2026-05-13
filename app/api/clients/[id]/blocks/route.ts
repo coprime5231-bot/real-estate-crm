@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
+import { resolveBothIds } from '@/lib/mba/id-map'
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    // Phase 4.2：blocks 仍掛在舊買方 DB page 下
+    const ids = await resolveBothIds(params.id)
     const response = await notion.blocks.children.list({
-      block_id: params.id,
+      block_id: ids.buyerNotionId,
       page_size: 100,
     })
 
@@ -56,8 +59,10 @@ export async function POST(
     const timestamp = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     const fullText = `${timestamp} - ${content}`
 
+    // Phase 4.2：blocks 寫到舊買方 DB page 下
+    const ids = await resolveBothIds(params.id)
     const response = await notion.blocks.children.append({
-      block_id: params.id,
+      block_id: ids.buyerNotionId,
       children: [
         {
           object: 'block',
