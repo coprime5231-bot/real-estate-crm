@@ -124,6 +124,11 @@ type DevMutation = Partial<{
   expiry: string | null
   important: string
   devProgress: string[]
+  ownerPhone: string | null
+  owner: string
+  address: string
+  price: string
+  ownerGrade: string | null
 }>
 
 export async function PATCH(request: NextRequest) {
@@ -150,6 +155,21 @@ export async function PATCH(request: NextRequest) {
     }
     if (body.devProgress !== undefined) {
       props['開發進度'] = { multi_select: (body.devProgress || []).map((n) => ({ name: n })) }
+    }
+    if (body.ownerPhone !== undefined) {
+      props['手機'] = { phone_number: body.ownerPhone || null }
+    }
+    if (body.owner !== undefined) {
+      props['屋主'] = { rich_text: body.owner ? [{ text: { content: body.owner } }] : [] }
+    }
+    if (body.address !== undefined) {
+      props['物件地址'] = { rich_text: body.address ? [{ text: { content: body.address } }] : [] }
+    }
+    if (body.price !== undefined) {
+      props['開價'] = { rich_text: body.price ? [{ text: { content: body.price } }] : [] }
+    }
+    if (body.ownerGrade !== undefined) {
+      props['客戶等級'] = body.ownerGrade ? { select: { name: body.ownerGrade } } : { select: null }
     }
     await notion.pages.update({ page_id: body.id, properties: props })
     return NextResponse.json({ ok: true, id: body.id })

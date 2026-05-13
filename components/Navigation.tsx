@@ -2,12 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Users, Wrench } from 'lucide-react'
+import { Users } from 'lucide-react'
 
 const NAV_ITEMS = [
-  { href: '/', label: '今天', icon: Home, match: (p: string) => p === '/' },
-  { href: '/marketing', label: '行銷', icon: Users, match: (p: string) => p.startsWith('/marketing') },
-  { href: '/entrust', label: '開發', icon: Wrench, match: (p: string) => p.startsWith('/entrust') },
+  { href: '/marketing', label: '行銷', icon: Users, match: (p: string) => p === '/' || p.startsWith('/marketing') || p.startsWith('/entrust') },
 ]
 
 export default function Navigation() {

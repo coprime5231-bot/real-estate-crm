@@ -22,6 +22,11 @@ import {
   Eye,
   Printer,
   X,
+  Send,
+  Phone,
+  MapPin,
+  Loader2,
+  Award,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Client, Grade, SLAStatus, ImportantItem, TodoItem, Block } from '@/lib/types'
@@ -32,8 +37,9 @@ import DateTimePopover, { formatTodayISO, computeDefaultTime } from '@/component
 import CommunityAutocomplete from '@/components/CommunityAutocomplete'
 import ClientBasicInfoTab from '@/components/ClientBasicInfoTab'
 import ClientViewingsTab from '@/components/ClientViewingsTab'
+import PropertyDetailModal, { DevProperty, DevStatus } from '@/components/PropertyDetailModal'
 
-type Tab = 'marketing' | 'entrust' | 'videos' | 'ai'
+type Tab = 'marketing' | 'entrust' | 'closed' | 'videos' | 'ai'
 
 // Phase 1 灰度：只對這三筆客戶顯示「物件配對」按鈕
 // Phase 2 擴大時把陣列清空或改成全開
@@ -213,6 +219,30 @@ export default function MarketingPage() {
   const progressInputRef = useRef<HTMLTextAreaElement>(null)
   const [conversationModeOn, setConversationModeOn] = useState(true)
 
+  // ===================== 委託 tab 狀態 =====================
+  type EntrustSubTab = '開發信' | '追蹤' | '委託'
+  type DevLetterFilter = 'pending' | 'sent'
+  const ENTRUST_TAB_TO_STATUS: Record<EntrustSubTab, DevStatus> = {
+    '開發信': '募集',
+    '追蹤': '追蹤',
+    '委託': '委託',
+  }
+  const [entrustSubTab, setEntrustSubTab] = useState<EntrustSubTab>('開發信')
+  const [entrustDevLetterFilter, setEntrustDevLetterFilter] = useState<DevLetterFilter>('pending')
+  const [entrustSearchTerm, setEntrustSearchTerm] = useState('')
+  const [properties, setProperties] = useState<DevProperty[]>([])
+  const [propertiesLoading, setPropertiesLoading] = useState(true)
+  const [propertiesError, setPropertiesError] = useState<string | null>(null)
+  const [propertyPendingId, setPropertyPendingId] = useState<string | null>(null)
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null)
+  const [propertyModalOpen, setPropertyModalOpen] = useState(false)
+
+  // ===================== 成交客戶 tab 狀態 =====================
+  const [closedProperties, setClosedProperties] = useState<DevProperty[]>([])
+  const [closedLoading, setClosedLoading] = useState(true)
+  const [closedError, setClosedError] = useState<string | null>(null)
+  const [closedSearchTerm, setClosedSearchTerm] = useState('')
+
   // ===================== 資料載入 =====================
 
   const fetchDashboard = useCallback(async () => {
@@ -247,6 +277,166 @@ export default function MarketingPage() {
     fetchDashboard()
     fetchClients()
   }, [fetchDashboard, fetchClients])
+
+  // === 委託 tab：載入物件 ===
+  const fetchProperties = useCallback(async () => {
+    setPropertiesLoading(true)
+    setPropertiesError(null)
+    try {
+      const res = await fetch('/api/dev?activeOnly=1')
+      if (!res.ok) throw new Error(`${res.status}`)
+      const data = (await res.json()) as DevProperty[]
+      setProperties(data)
+    } catch (e: any) {
+      setPropertiesError(e?.message || '載入失敗')
+    } finally {
+      setPropertiesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'entrust' && properties.length === 0 && !propertiesError) {
+      fetchProperties()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  // === 成交客戶 tab：載入 ===
+  const fetchClosedProperties = useCallback(async () => {
+    setClosedLoading(true)
+    setClosedError(null)
+    try {
+      const res = await fetch('/api/dev?status=' + encodeURIComponent('成交'))
+      if (!res.ok) throw new Error(`${res.status}`)
+      const data = (await res.json()) as DevProperty[]
+      setClosedProperties(data)
+    } catch (e: any) {
+      setClosedError(e?.message || '載入失敗')
+    } finally {
+      setClosedLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'closed' && closedProperties.length === 0 && !closedError) {
+      fetchClosedProperties()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  const filteredClosed = useMemo(() => {
+    let list = closedProperties
+    const q = closedSearchTerm.trim().toLowerCase()
+    if (q) {
+      list = list.filter((p) => {
+        const hay = [p.name, p.owner, p.address, p.ownerPhone].filter(Boolean).join(' ').toLowerCase()
+        return hay.includes(q)
+      })
+    }
+    // 成交日期新到舊
+    return [...list].sort((a, b) => {
+      const ad = a.closingDate ? new Date(a.closingDate).getTime() : 0
+      const bd = b.closingDate ? new Date(b.closingDate).getTime() : 0
+      return bd - ad
+    })
+  }, [closedProperties, closedSearchTerm])
+
+  // === 委託 tab：PATCH 物件 ===
+  const patchProperty = useCallback(
+    async (id: string, patch: Partial<DevProperty>) => {
+      setPropertyPendingId(id)
+      try {
+        const apiPatch: any = {}
+        for (const k of Object.keys(patch)) {
+          ;(apiPatch as any)[k] = (patch as any)[k]
+        }
+        const res = await fetch('/api/dev', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, ...apiPatch }),
+        })
+        if (!res.ok) throw new Error(`PATCH ${res.status}`)
+        setProperties((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
+        )
+        setClosedProperties((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
+        )
+      } catch (e: any) {
+        toast.error(`更新失敗：${e?.message || e}`)
+        throw e
+      } finally {
+        setPropertyPendingId(null)
+      }
+    },
+    []
+  )
+
+  const handlePropertyModalSave = useCallback(
+    async (id: string, patch: Partial<DevProperty>, opts?: { autoPromoted?: boolean }) => {
+      await patchProperty(id, patch)
+      if (opts?.autoPromoted) {
+        toast.success('手機已填、自動升級到「追蹤」')
+      } else {
+        toast.success('已保存')
+      }
+    },
+    [patchProperty]
+  )
+
+  const selectedProperty = useMemo(
+    () =>
+      properties.find((p) => p.id === selectedPropertyId) ||
+      closedProperties.find((p) => p.id === selectedPropertyId) ||
+      null,
+    [properties, closedProperties, selectedPropertyId]
+  )
+
+  // === 委託 tab：篩選後的列表 ===
+  const filteredProperties = useMemo(() => {
+    const want = ENTRUST_TAB_TO_STATUS[entrustSubTab]
+    let list = properties.filter((p) => p.status === want)
+    if (entrustSubTab === '開發信') {
+      list = list.filter((p) =>
+        entrustDevLetterFilter === 'sent' ? p.devLetter === true : !p.devLetter
+      )
+    }
+    const q = entrustSearchTerm.trim().toLowerCase()
+    if (q) {
+      list = list.filter((p) => {
+        const hay = [
+          p.name,
+          p.owner,
+          p.address,
+          p.ownerPhone,
+        ].filter(Boolean).join(' ').toLowerCase()
+        return hay.includes(q)
+      })
+    }
+    return list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties, entrustSubTab, entrustDevLetterFilter, entrustSearchTerm])
+
+  const propertyCounts = useMemo(() => {
+    const c: Record<EntrustSubTab, number> = { '開發信': 0, '追蹤': 0, '委託': 0 }
+    for (const p of properties) {
+      for (const t of Object.keys(ENTRUST_TAB_TO_STATUS) as EntrustSubTab[]) {
+        if (p.status === ENTRUST_TAB_TO_STATUS[t]) c[t]++
+      }
+    }
+    return c
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties])
+
+  const openPropertyModal = (id: string) => {
+    setSelectedPropertyId(id)
+    setPropertyModalOpen(true)
+  }
+  const closePropertyModal = () => {
+    setPropertyModalOpen(false)
+    // 保留 selectedPropertyId 短時間、避免 modal 飛走時 prop 變 null
+    setTimeout(() => setSelectedPropertyId(null), 200)
+  }
 
   // 選中客戶時載入詳情
   const fetchClientDetail = useCallback(async (clientId: string) => {
@@ -1249,6 +1439,7 @@ export default function MarketingPage() {
             {([
               { key: 'marketing', label: '行銷', icon: Users },
               { key: 'entrust', label: '委託', icon: FileText },
+              { key: 'closed', label: '成交客戶', icon: Award },
               { key: 'videos', label: '短影音', icon: Video },
               { key: 'ai', label: 'AI', icon: Zap },
             ] as const).map(({ key, label, icon: Icon }) => (
@@ -1847,12 +2038,261 @@ export default function MarketingPage() {
 
         {/* --- 委託 Tab --- */}
         {activeTab === 'entrust' && (
-          <div className="flex items-center justify-center py-24 text-slate-500">
-            <div className="text-center">
-              <FileText size={48} className="mx-auto mb-3 opacity-30" />
-              <p className="text-lg">委託管理</p>
-              <p className="text-sm mt-1">開發中，敬請期待</p>
+          <div className="px-6 py-5">
+            {/* 三按鈕 + 搜尋欄 + 重新整理 */}
+            <div className="flex items-center gap-2 flex-wrap mb-4">
+              {(Object.keys(ENTRUST_TAB_TO_STATUS) as EntrustSubTab[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setEntrustSubTab(t)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border transition-colors ${
+                    entrustSubTab === t
+                      ? 'border-indigo-500 bg-indigo-600/30 text-white'
+                      : 'border-slate-700 text-slate-400 hover:text-white hover:border-slate-500'
+                  }`}
+                >
+                  {t}
+                  <span className="text-xs text-slate-500">{propertyCounts[t]}</span>
+                </button>
+              ))}
+
+              <div className="relative ml-2 flex-1 min-w-[200px] max-w-md">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                <input
+                  type="text"
+                  value={entrustSearchTerm}
+                  onChange={(e) => setEntrustSearchTerm(e.target.value)}
+                  placeholder="搜尋物件 / 屋主 / 地址 / 電話"
+                  className="w-full bg-slate-800/60 border border-slate-700 rounded pl-8 pr-3 py-1.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <button
+                onClick={fetchProperties}
+                disabled={propertiesLoading}
+                className="text-xs text-slate-400 hover:text-white px-2 py-1.5 rounded border border-slate-700 disabled:opacity-50"
+              >
+                {propertiesLoading ? '載入中…' : '↻ 重新整理'}
+              </button>
             </div>
+
+            {/* 開發信 sub-filter（待寄 / 已寄留底） */}
+            {entrustSubTab === '開發信' && (
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => setEntrustDevLetterFilter('pending')}
+                  className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded border transition-colors ${
+                    entrustDevLetterFilter === 'pending'
+                      ? 'border-indigo-500 bg-indigo-950/50 text-indigo-200'
+                      : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Send size={12} /> 待寄
+                </button>
+                <button
+                  onClick={() => setEntrustDevLetterFilter('sent')}
+                  className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded border transition-colors ${
+                    entrustDevLetterFilter === 'sent'
+                      ? 'border-emerald-600 bg-emerald-950/40 text-emerald-200'
+                      : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Eye size={12} /> 已寄留底
+                </button>
+              </div>
+            )}
+
+            {/* Error */}
+            {propertiesError && (
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-rose-950/40 border border-rose-900/60 rounded text-rose-300 text-sm">
+                <AlertTriangle size={14} />
+                {propertiesError}
+              </div>
+            )}
+
+            {/* List */}
+            {propertiesLoading ? (
+              <div className="flex items-center justify-center py-16 text-slate-500">
+                <Loader2 className="animate-spin" size={20} />
+              </div>
+            ) : filteredProperties.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 text-sm">
+                {entrustSearchTerm
+                  ? '沒有符合搜尋的物件'
+                  : `目前沒有「${entrustSubTab}${
+                      entrustSubTab === '開發信'
+                        ? entrustDevLetterFilter === 'sent' ? '・已寄' : '・待寄'
+                        : ''
+                    }」物件`}
+              </div>
+            ) : (
+              <div>
+                {filteredProperties.map((prop) => {
+                  const expired = prop.expiry ? new Date(prop.expiry).getTime() < Date.now() : false
+                  const isDevLetter = entrustSubTab === '開發信'
+                  return (
+                    <div
+                      key={prop.id}
+                      className="border border-slate-700 bg-slate-900/60 rounded-lg p-3 mb-2 hover:border-slate-500 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          onClick={() => openPropertyModal(prop.id)}
+                          className="flex-1 min-w-0 text-left"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-white truncate">{prop.name}</span>
+                            {prop.price && <span className="text-amber-400 text-sm">{prop.price}</span>}
+                            {expired && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300">已過期</span>
+                            )}
+                          </div>
+                          {prop.address && (
+                            <div className="text-xs text-slate-400 mt-0.5 truncate flex items-center gap-1">
+                              <MapPin size={11} /> {prop.address}
+                            </div>
+                          )}
+                          <div className="text-xs text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
+                            {prop.owner && <span>屋主：{prop.owner}</span>}
+                            {prop.ownerPhone && (
+                              <span className="flex items-center gap-1 text-slate-500">
+                                <Phone size={11} /> {prop.ownerPhone}
+                              </span>
+                            )}
+                            {prop.expiry && (
+                              <span className="flex items-center gap-1 text-slate-500">
+                                <Calendar size={11} /> {prop.expiry}
+                              </span>
+                            )}
+                          </div>
+                          {entrustSubTab === '追蹤' && prop.devProgress.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {prop.devProgress.map((dp) => (
+                                <span
+                                  key={dp}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700"
+                                >
+                                  {dp}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {entrustSubTab === '委託' && prop.important && (
+                            <div className="mt-1 text-xs text-amber-300/80 bg-amber-950/30 border border-amber-900/40 rounded px-2 py-1">
+                              ⚠ {prop.important}
+                            </div>
+                          )}
+                        </button>
+
+                        {/* 只在開發信 tab 保留「已寄」checkbox、不再有升級按鈕 */}
+                        {isDevLetter && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              patchProperty(prop.id, { devLetter: !prop.devLetter }).catch(() => {})
+                            }}
+                            disabled={propertyPendingId === prop.id}
+                            className={`p-1.5 rounded transition-colors shrink-0 ${
+                              prop.devLetter
+                                ? 'text-emerald-400 hover:text-emerald-300'
+                                : 'text-slate-500 hover:text-slate-300'
+                            }`}
+                            title={prop.devLetter ? '已寄、點擊取消' : '未寄、點擊標記已寄'}
+                          >
+                            {prop.devLetter ? <CheckSquare size={18} /> : <Square size={18} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* --- 成交客戶 Tab --- */}
+        {activeTab === 'closed' && (
+          <div className="px-6 py-5">
+            <div className="flex items-center gap-2 flex-wrap mb-4">
+              <div className="text-sm text-slate-300 font-medium pr-2">
+                成交客戶
+                <span className="ml-2 text-xs text-slate-500">{closedProperties.length}</span>
+              </div>
+
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                <input
+                  type="text"
+                  value={closedSearchTerm}
+                  onChange={(e) => setClosedSearchTerm(e.target.value)}
+                  placeholder="搜尋物件 / 屋主 / 地址 / 電話"
+                  className="w-full bg-slate-800/60 border border-slate-700 rounded pl-8 pr-3 py-1.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <button
+                onClick={fetchClosedProperties}
+                disabled={closedLoading}
+                className="text-xs text-slate-400 hover:text-white px-2 py-1.5 rounded border border-slate-700 disabled:opacity-50"
+              >
+                {closedLoading ? '載入中…' : '↻ 重新整理'}
+              </button>
+            </div>
+
+            {closedError && (
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-rose-950/40 border border-rose-900/60 rounded text-rose-300 text-sm">
+                <AlertTriangle size={14} />
+                {closedError}
+              </div>
+            )}
+
+            {closedLoading ? (
+              <div className="flex items-center justify-center py-16 text-slate-500">
+                <Loader2 className="animate-spin" size={20} />
+              </div>
+            ) : filteredClosed.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 text-sm">
+                {closedSearchTerm ? '沒有符合搜尋的物件' : '還沒有成交記錄'}
+              </div>
+            ) : (
+              <div>
+                {filteredClosed.map((prop) => (
+                  <div
+                    key={prop.id}
+                    className="border border-slate-700 bg-slate-900/60 rounded-lg p-3 mb-2 hover:border-slate-500 transition-colors"
+                  >
+                    <button
+                      onClick={() => openPropertyModal(prop.id)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-white truncate">{prop.name}</span>
+                        {prop.price && <span className="text-amber-400 text-sm">{prop.price}</span>}
+                        {prop.closingDate && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 border border-emerald-800/60">
+                            成交 {prop.closingDate}
+                          </span>
+                        )}
+                      </div>
+                      {prop.address && (
+                        <div className="text-xs text-slate-400 mt-0.5 truncate flex items-center gap-1">
+                          <MapPin size={11} /> {prop.address}
+                        </div>
+                      )}
+                      <div className="text-xs text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
+                        {prop.owner && <span>屋主：{prop.owner}</span>}
+                        {prop.ownerPhone && (
+                          <span className="flex items-center gap-1 text-slate-500">
+                            <Phone size={11} /> {prop.ownerPhone}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -2182,6 +2622,14 @@ export default function MarketingPage() {
           </div>
         </div>
       )}
+
+      {/* 委託 tab：物件詳情 Modal */}
+      <PropertyDetailModal
+        property={selectedProperty}
+        isOpen={propertyModalOpen && !!selectedProperty}
+        onClose={closePropertyModal}
+        onSave={handlePropertyModalSave}
+      />
     </div>
   )
 }
