@@ -15,8 +15,8 @@ type ViewingAction = 'no' | 'yes'
 
 const VISIT_BUTTONS: Array<{ label: string; action: VisitAction }> = [
   { label: '無效', action: 'invalid' },
-  { label: '再來一次', action: 'retry' },
-  { label: '找到人了', action: 'found' },
+  { label: '再訪', action: 'retry' },
+  { label: '找到', action: 'found' },
 ]
 
 const VIEWING_BUTTONS: Array<{ label: string; action: ViewingAction }> = [

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { X, Save, Phone, MapPin, Calendar, User } from 'lucide-react'
 
 export type DevStatus = '募集' | '追蹤' | '委託' | '成交' | '過期'
-export type VisitTodo = '物件地拜訪' | '戶藉地拜訪' | '物件地覆訪' | '戶藉地覆訪'
+export type VisitTodo = '物件地拜訪' | '戶藉地拜訪' | '物件地覆訪' | '戶藉地覆訪' | '無效'
 
 export interface DevProperty {
   id: string
@@ -26,6 +26,7 @@ export interface DevProperty {
   visitTodo?: VisitTodo
   nextVisitAt?: string | null
   calendarEventId?: string
+  source?: 'dev' | 'buyer'
 }
 
 interface PropertyDetailModalProps {

@@ -77,6 +77,10 @@ interface DateTimePopoverProps {
   defaultOpen?: boolean
   /** 顯示為 12 小時制 + AM/PM（內部 time 仍存 24h "HH:MM"）。預設 false */
   hour12?: boolean
+  /** 觸發按鈕上、有值時同時顯示時間文字（不只圖示）。預設 false */
+  showLabel?: boolean
+  /** 有值時、文字前的前綴（例 "已排"）。預設空字串 */
+  labelPrefix?: string
 }
 
 export default function DateTimePopover({
@@ -90,6 +94,8 @@ export default function DateTimePopover({
   title,
   defaultOpen = false,
   hour12 = false,
+  showLabel = false,
+  labelPrefix = '',
 }: DateTimePopoverProps) {
   const [open, setOpen] = useState(defaultOpen)
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -152,6 +158,12 @@ export default function DateTimePopover({
         aria-label={displayLabel}
       >
         <Calendar size={iconSize} />
+        {showLabel && hasValue && (
+          <span className="ml-1.5">
+            {labelPrefix ? `${labelPrefix} ` : ''}
+            {timeLabel ? `${date.slice(5).replace('-', '/')} ${timeLabel}` : date}
+          </span>
+        )}
       </button>
       {open && (
         <div

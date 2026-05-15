@@ -4,7 +4,7 @@ import { createTimedEvent } from '@/lib/mba/google-calendar'
 
 export const dynamic = 'force-dynamic'
 
-type VisitTodo = '物件地拜訪' | '戶藉地拜訪' | '物件地覆訪' | '戶藉地覆訪'
+type VisitTodo = '物件地拜訪' | '戶藉地拜訪' | '物件地覆訪' | '戶藉地覆訪' | '無效'
 
 /**
  * POST /api/dev/schedule-visit  body={ id, scheduledAt }

@@ -65,9 +65,9 @@ export async function POST(req: NextRequest) {
     )
 
     let notionOk: boolean | null = null
-    if (act !== 'found' && summary) {
+    if (summary || description) {
       const wb = await handleVisitWriteback({
-        summary,
+        summary: summary ?? '',
         description: description ?? null,
         action: act,
       }).catch((err) => {

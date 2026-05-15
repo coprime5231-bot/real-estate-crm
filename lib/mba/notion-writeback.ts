@@ -82,17 +82,20 @@ function computeWriteback(
   if (action === 'invalid') {
     if (etype === 'visit_property' || etype === 'revisit_property') {
       if (houseIsSame) {
-        return { newTodo: '', shouldUpdate: false, noteText: '物件地找不到人' }
+        // 物件地 = 戶藉地、物件地都找不到人 → 整單無效
+        return { newTodo: '無效', shouldUpdate: true, noteText: '物件地找不到人' }
       }
+      // 物件地找不到人、戶藉地址不同 → 流到戶藉地拜訪
       return {
         newTodo: '戶藉地拜訪',
         shouldUpdate: true,
         noteText: '物件地找不到人',
       }
     }
+    // 戶藉地 stage 找不到人 → 整單無效
     return {
-      newTodo: '',
-      shouldUpdate: false,
+      newTodo: '無效',
+      shouldUpdate: true,
       noteText: '戶藉地找不到人',
     }
   }
@@ -163,10 +166,24 @@ async function appendNotionBlock(
   })
 }
 
+async function updateNotionFound(pageId: string): Promise<void> {
+  await fetch(`${NOTION_API}/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: notionHeaders(),
+    body: JSON.stringify({
+      properties: {
+        '狀態': { select: { name: '追蹤' } },
+        '待辦': { select: null },
+        '已同步': { select: null },
+      },
+    }),
+  })
+}
+
 export async function handleVisitWriteback(params: {
   summary: string
   description: string | null
-  action: 'invalid' | 'retry'
+  action: 'invalid' | 'retry' | 'found'
 }): Promise<{
   success: boolean
   noteText: string
@@ -176,6 +193,19 @@ export async function handleVisitWriteback(params: {
   if (!pageId) {
     console.warn('[notion-writeback] no page_id in description')
     return { success: false, noteText: '', pageId: null }
+  }
+
+  // 找到 = 升級 募集→追蹤、清待辦；不走 computeWriteback (summary 不需要)
+  if (params.action === 'found') {
+    const fullNote = `${taipeiTimestamp()} - 找到人了`
+    try {
+      await updateNotionFound(pageId)
+      await appendNotionBlock(pageId, fullNote)
+      return { success: true, noteText: fullNote, pageId }
+    } catch (err) {
+      console.error('[notion-writeback] found error', err)
+      return { success: false, noteText: fullNote, pageId }
+    }
   }
 
   const etype = classifyVisitEvent(params.summary)

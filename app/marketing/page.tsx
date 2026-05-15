@@ -110,6 +110,19 @@ function classifyHouseholdRegion(addr?: string): HouseholdRegionKey {
   return 'north'
 }
 
+// 把 Notion 存的 ISO datetime 拆成 picker state {date: "YYYY-MM-DD", time: "HH:MM"}
+function parseISOToPick(iso?: string | null): { date: string; time: string } {
+  if (!iso) return { date: '', time: '' }
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return { date: '', time: '' }
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const h = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return { date: `${y}-${m}-${day}`, time: `${h}:${mm}` }
+}
+
 // 把 ISO datetime 顯示成「5/22 下午 3:00」型式（12 小時制）
 function fmtVisitTime(iso?: string | null): string {
   if (!iso) return ''
@@ -308,11 +321,9 @@ export default function MarketingPage() {
   // 拜訪卡片 per-id 暫存 picker state（純排程、不做狀態切換）
   const [visitPicks, setVisitPicks] = useState<Record<string, { date: string; time: string }>>({})
   const [visitSchedulingId, setVisitSchedulingId] = useState<string | null>(null)
-  // 戶藉地 tab 區域 filter（multi-select）；預設只勾高雄
+  // 戶藉地 tab 區域 filter（單選）；預設高雄
   type HouseholdRegion = 'kaohsiung' | 'south' | 'north'
-  const [householdRegions, setHouseholdRegions] = useState<Set<HouseholdRegion>>(
-    () => new Set<HouseholdRegion>(['kaohsiung'])
-  )
+  const [householdRegion, setHouseholdRegion] = useState<HouseholdRegion>('kaohsiung')
 
   // ===================== 成交客戶 tab 狀態 =====================
   const [closedProperties, setClosedProperties] = useState<DevProperty[]>([])
@@ -383,7 +394,7 @@ export default function MarketingPage() {
     setClosedLoading(true)
     setClosedError(null)
     try {
-      const res = await fetch('/api/dev?status=' + encodeURIComponent('成交'))
+      const res = await fetch('/api/closed-customers')
       if (!res.ok) throw new Error(`${res.status}`)
       const data = (await res.json()) as DevProperty[]
       setClosedProperties(data)
@@ -571,9 +582,9 @@ export default function MarketingPage() {
       } else {
         const want = DEV_SUBTAB_VISIT[devSubTab]
         list = list.filter((p) => p.visitTodo === want)
-        // 戶藉 tab 額外吃區域 filter
+        // 戶藉 tab 額外吃區域 filter（單選）
         if (devSubTab === 'visit-household' || devSubTab === 'revisit-household') {
-          list = list.filter((p) => householdRegions.has(classifyHouseholdRegion(p.householdAddress)))
+          list = list.filter((p) => classifyHouseholdRegion(p.householdAddress) === householdRegion)
         }
       }
     }
@@ -591,7 +602,7 @@ export default function MarketingPage() {
     }
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [properties, entrustSubTab, devSubTab, entrustDevLetterFilter, entrustSearchTerm, householdRegions])
+  }, [properties, entrustSubTab, devSubTab, entrustDevLetterFilter, entrustSearchTerm, householdRegion])
 
   const propertyCounts = useMemo(() => {
     const c: Record<EntrustSubTab, number> = { '開發': 0, '追蹤': 0, '委託': 0 }
@@ -1692,18 +1703,18 @@ export default function MarketingPage() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex gap-1">
             {([
-              { key: 'marketing', label: '行銷', icon: Users },
-              { key: 'entrust', label: '委託', icon: FileText },
-              { key: 'closed', label: '成交客戶', icon: Award },
-              { key: 'videos', label: '短影音', icon: Video },
-              { key: 'ai', label: 'AI', icon: Zap },
-            ] as const).map(({ key, label, icon: Icon }) => (
+              { key: 'marketing', label: '行銷', icon: Users, active: 'border-sky-500 text-sky-400 bg-sky-500/10' },
+              { key: 'entrust', label: '委託', icon: FileText, active: 'border-amber-500 text-amber-400 bg-amber-500/10' },
+              { key: 'closed', label: '成交客戶', icon: Award, active: 'border-indigo-500 text-indigo-400 bg-indigo-500/10' },
+              { key: 'videos', label: '短影音', icon: Video, active: 'border-emerald-500 text-emerald-400 bg-emerald-500/10' },
+              { key: 'ai', label: 'AI', icon: Zap, active: 'border-violet-500 text-violet-400 bg-violet-500/10' },
+            ] as const).map(({ key, label, icon: Icon, active }) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
                 className={`flex items-center gap-2 px-5 py-3 text-sm font-medium transition-all border-b-2 ${
                   activeTab === key
-                    ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10'
+                    ? active
                     : 'border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-600'
                 }`}
               >
@@ -2594,18 +2605,11 @@ export default function MarketingPage() {
                       { key: 'south' as HouseholdRegion, label: '南部' },
                       { key: 'north' as HouseholdRegion, label: '中北部' },
                     ]).map(({ key, label }) => {
-                      const on = householdRegions.has(key)
+                      const on = householdRegion === key
                       return (
                         <button
                           key={key}
-                          onClick={() => {
-                            setHouseholdRegions((prev) => {
-                              const next = new Set(prev)
-                              if (next.has(key)) next.delete(key)
-                              else next.add(key)
-                              return next
-                            })
-                          }}
+                          onClick={() => setHouseholdRegion(key)}
                           className={`px-2.5 py-1 rounded border transition-colors flex items-center gap-1 ${
                             on
                               ? 'border-indigo-500 bg-indigo-950/50 text-indigo-200'
@@ -2627,8 +2631,6 @@ export default function MarketingPage() {
                   <div className="text-center py-12 text-slate-500 text-sm">
                     {entrustSearchTerm
                       ? '沒有符合搜尋的物件'
-                      : (devSubTab === 'visit-household' || devSubTab === 'revisit-household') && householdRegions.size === 0
-                      ? '請至少勾一個區域'
                       : (devSubTab === 'visit-household' || devSubTab === 'revisit-household') &&
                         Object.values(householdRegionCounts).some((n) => n > 0)
                       ? '此區域沒有物件、試試切換區域'
@@ -2639,9 +2641,11 @@ export default function MarketingPage() {
                     {filteredProperties.map((prop) => {
                       const isHousehold = devSubTab === 'visit-household' || devSubTab === 'revisit-household'
                       const displayAddr = isHousehold ? prop.householdAddress : prop.address
-                      const pick = visitPicks[prop.id] || { date: '', time: '' }
-                      const scheduled = prop.nextVisitAt
-                      const calLink = prop.calendarEventId
+                      const savedPick = parseISOToPick(prop.nextVisitAt)
+                      const userPick = visitPicks[prop.id]
+                      const displayPick = userPick || savedPick
+                      const hasUserChange = !!userPick && (userPick.date !== savedPick.date || userPick.time !== savedPick.time)
+                      const canSubmit = !!displayPick.date && !!displayPick.time && (!prop.nextVisitAt || hasUserChange)
                       const isScheduling = visitSchedulingId === prop.id
                       return (
                         <div
@@ -2681,69 +2685,28 @@ export default function MarketingPage() {
                               {displayAddr || <span className="text-slate-600">（未填）</span>}
                             </span>
                           </div>
-                          {/* 排程 / 三按鈕 */}
+                          {/* 排程列：picker + 建立行事曆。已排 / 未排 共用同一個 layout */}
                           <div className="px-4 py-2 border-t border-slate-700 flex items-center gap-2 flex-wrap">
-                            {scheduled ? (
-                              <>
-                                <span className="text-xs text-indigo-300 flex items-center gap-1.5 bg-indigo-950/40 border border-indigo-800/60 rounded px-2 py-1">
-                                  <Calendar size={12} /> 已排 {fmtVisitTime(scheduled)}
-                                </span>
-                                {calLink && /^https?:\/\//.test(calLink) && (
-                                  <a
-                                    href={calLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-slate-400 hover:text-indigo-400 flex items-center gap-1"
-                                    title="開啟 Google Calendar"
-                                  >
-                                    <ExternalLink size={12} /> 開 Calendar
-                                  </a>
-                                )}
-                                <DateTimePopover
-                                  date={pick.date}
-                                  time={pick.time}
-                                  hour12
-                                  onChange={(d, t) => setVisitPick(prop.id, d, t)}
-                                  title="改時間（會建立新行事曆事件）"
-                                  iconSize={12}
-                                  buttonClass="text-xs text-slate-400 hover:text-indigo-400 border border-slate-700 hover:border-indigo-500 rounded px-2 py-1 flex items-center gap-1"
-                                  activeButtonClass="text-xs text-indigo-300 border border-indigo-500/60 bg-indigo-950/40 rounded px-2 py-1 flex items-center gap-1"
-                                />
-                                {pick.date && pick.time && (
-                                  <button
-                                    onClick={() => handleScheduleVisit(prop.id)}
-                                    disabled={isScheduling}
-                                    className="text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white"
-                                  >
-                                    {isScheduling ? '建立中…' : '改時間'}
-                                  </button>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <DateTimePopover
-                                  date={pick.date}
-                                  time={pick.time}
-                                  hour12
-                                  onChange={(d, t) => setVisitPick(prop.id, d, t)}
-                                  title="選日期 + 時間"
-                                  iconSize={14}
-                                  buttonClass="text-xs text-slate-400 hover:text-indigo-400 border border-slate-700 hover:border-indigo-500 rounded px-2 py-1 flex items-center gap-1"
-                                  activeButtonClass="text-xs text-indigo-300 border border-indigo-500/60 bg-indigo-950/40 rounded px-2 py-1 flex items-center gap-1"
-                                />
-                                {pick.date && pick.time && (
-                                  <span className="text-xs text-slate-300">{fmtVisitTime(`${pick.date}T${pick.time}:00+08:00`)}</span>
-                                )}
-                                <button
-                                  onClick={() => handleScheduleVisit(prop.id)}
-                                  disabled={!pick.date || !pick.time || isScheduling}
-                                  className="text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1"
-                                >
-                                  <CalendarPlus size={12} />
-                                  {isScheduling ? '建立中…' : '建立行事曆'}
-                                </button>
-                              </>
-                            )}
+                            <DateTimePopover
+                              date={displayPick.date}
+                              time={displayPick.time}
+                              hour12
+                              showLabel
+                              labelPrefix={prop.nextVisitAt && !hasUserChange ? '已排' : ''}
+                              onChange={(d, t) => setVisitPick(prop.id, d, t)}
+                              title={prop.nextVisitAt ? '改時間' : '選日期 + 時間'}
+                              iconSize={14}
+                              buttonClass="text-xs text-slate-400 hover:text-indigo-400 border border-slate-700 hover:border-indigo-500 rounded px-2 py-1 flex items-center gap-1"
+                              activeButtonClass="text-xs text-indigo-300 border border-indigo-500/60 bg-indigo-950/40 rounded px-2 py-1 flex items-center gap-1"
+                            />
+                            <button
+                              onClick={() => handleScheduleVisit(prop.id)}
+                              disabled={!canSubmit || isScheduling}
+                              className="text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1"
+                            >
+                              <CalendarPlus size={12} />
+                              {isScheduling ? '建立中…' : '建立行事曆'}
+                            </button>
                           </div>
                         </div>
                       )
@@ -3106,6 +3069,15 @@ export default function MarketingPage() {
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-white truncate">{prop.name}</span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                            prop.source === 'buyer'
+                              ? 'bg-sky-900/40 text-sky-300 border-sky-800/60'
+                              : 'bg-amber-900/30 text-amber-300 border-amber-800/60'
+                          }`}
+                        >
+                          {prop.source === 'buyer' ? '行銷' : '開發'}
+                        </span>
                         {prop.price && <span className="text-amber-400 text-sm">{prop.price}</span>}
                         {prop.closingDate && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 border border-emerald-800/60">

@@ -93,8 +93,10 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
         body: JSON.stringify({ note: val }),
       })
       if (!res.ok) throw new Error('PATCH failed')
+      const data = await res.json().catch(() => ({}))
       onUpdate({ note: val || null })
       setEditingNote(false)
+      if (data?.warning) toast.warning(data.warning)
     } catch (err: any) {
       console.error('save note failed:', err)
       toast.error('備註儲存失敗')

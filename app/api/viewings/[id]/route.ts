@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/mba/db'
+import notion from '@/lib/notion'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,6 +9,9 @@ export const dynamic = 'force-dynamic'
  * 可更新欄位：opinion ('liked'|'disliked'|null)、note
  *
  * 限定只允許 opinion 與 note，避免前端誤送到其他欄位。
+ *
+ * note 更新且非空 → 同步 append 一行到買方 Notion 內文（best-effort、失敗只 warning）
+ *   格式：[M/D 👁 帶看 社區名] 備註內容   （M/D 取帶看日期）
  */
 export async function PATCH(
   request: NextRequest,
@@ -49,16 +53,52 @@ export async function PATCH(
     return NextResponse.json({ error: '無可更新欄位' }, { status: 400 })
   }
 
+  const noteUpdated = body.note !== undefined
+
   values.push(idNum)
   try {
     const res = await pool.query(
-      `UPDATE viewings SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, opinion, note`,
+      `UPDATE viewings SET ${updates.join(', ')} WHERE id = $${idx}
+       RETURNING id, opinion, note, notion_buyer_id, datetime, community_name, location`,
       values
     )
     if (res.rowCount === 0) {
       return NextResponse.json({ error: '找不到帶看記錄' }, { status: 404 })
     }
-    return NextResponse.json(res.rows[0])
+    const row = res.rows[0]
+
+    // note 更新且非空 → append 一行到買方 Notion 內文（best-effort）
+    let notionWarning: string | null = null
+    const noteText = typeof row.note === 'string' ? row.note.trim() : ''
+    if (noteUpdated && noteText && row.notion_buyer_id) {
+      try {
+        const d = new Date(row.datetime)
+        const md = isNaN(d.getTime()) ? '' : `${d.getMonth() + 1}/${d.getDate()}`
+        const place = (row.community_name || '').trim()
+        const head = `${md ? md + ' ' : ''}👁 帶看${place ? ' ' + place : ''}`
+        const fullText = `[${head}] ${noteText}`
+        await notion.blocks.children.append({
+          block_id: row.notion_buyer_id,
+          children: [
+            {
+              object: 'block',
+              type: 'paragraph',
+              paragraph: { rich_text: [{ type: 'text', text: { content: fullText } }] },
+            },
+          ],
+        })
+      } catch (e: any) {
+        console.error('viewings note → Notion append failed:', e?.message || e)
+        notionWarning = '已存 PG、Notion 內文寫入失敗'
+      }
+    }
+
+    return NextResponse.json({
+      id: row.id,
+      opinion: row.opinion,
+      note: row.note,
+      ...(notionWarning ? { warning: notionWarning } : {}),
+    })
   } catch (err: any) {
     console.error('PATCH viewings failed:', err?.message || err)
     return NextResponse.json(
