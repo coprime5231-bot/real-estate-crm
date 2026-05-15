@@ -32,7 +32,30 @@ function snapTo15(time: string): string {
 }
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+const HOUR_OPTIONS_12 = ['12', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11']
 const MINUTE_OPTIONS = ['00', '15', '30', '45']
+
+// 24h「HH」轉 12h { h12, ampm }
+function to12(h24: string): { h12: string; ampm: 'AM' | 'PM' } {
+  const h = parseInt(h24, 10)
+  if (isNaN(h)) return { h12: '', ampm: 'AM' }
+  const ampm: 'AM' | 'PM' = h >= 12 ? 'PM' : 'AM'
+  const m = h % 12
+  const h12 = m === 0 ? 12 : m
+  return { h12: String(h12).padStart(2, '0'), ampm }
+}
+
+// 12h { h12, ampm } 轉回 24h「HH」
+function from12(h12: string, ampm: 'AM' | 'PM'): string {
+  let h = parseInt(h12, 10)
+  if (isNaN(h)) return ''
+  if (ampm === 'AM') {
+    if (h === 12) h = 0
+  } else if (h !== 12) {
+    h += 12
+  }
+  return String(h).padStart(2, '0')
+}
 
 // 打開 popover 時若 date/time 為空，自動補預設值
 export function withDefaultsIfEmpty(date: string, time: string) {
@@ -52,6 +75,8 @@ interface DateTimePopoverProps {
   align?: 'left' | 'right'
   title?: string
   defaultOpen?: boolean
+  /** 顯示為 12 小時制 + AM/PM（內部 time 仍存 24h "HH:MM"）。預設 false */
+  hour12?: boolean
 }
 
 export default function DateTimePopover({
@@ -64,6 +89,7 @@ export default function DateTimePopover({
   align = 'left',
   title,
   defaultOpen = false,
+  hour12 = false,
 }: DateTimePopoverProps) {
   const [open, setOpen] = useState(defaultOpen)
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -104,8 +130,16 @@ export default function DateTimePopover({
   }, [open, date, time, onChange])
 
   const hasValue = Boolean(date)
+  const currentHour24 = time ? time.split(':')[0] : ''
+  const currentMinute = time ? snapTo15(time).split(':')[1] : ''
+  const { h12: currentH12, ampm: currentAmpm } = to12(currentHour24)
+  let timeLabel = time
+  if (time && hour12) {
+    const mmPart = time.split(':')[1] || '00'
+    timeLabel = `${currentAmpm === 'AM' ? '上午' : '下午'} ${currentH12}:${mmPart}`
+  }
   const displayLabel = hasValue
-    ? `${date}${time ? ' ' + time : ''}`
+    ? `${date}${time ? ' ' + timeLabel : ''}`
     : '選擇日期時間'
 
   return (
@@ -134,24 +168,59 @@ export default function DateTimePopover({
               className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
             />
             <div className="flex items-center gap-1">
-              <select
-                value={time ? time.split(':')[0] : ''}
-                onChange={(e) => {
-                  const hh = e.target.value
-                  const mm = time ? snapTo15(time).split(':')[1] : '00'
-                  onChange(date, hh ? `${hh}:${mm}` : '')
-                }}
-                className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
-              >
-                <option value="">--</option>
-                {HOUR_OPTIONS.map((h) => <option key={h} value={h}>{h}</option>)}
-              </select>
+              {hour12 && (
+                <select
+                  value={currentAmpm}
+                  onChange={(e) => {
+                    const ampm = e.target.value as 'AM' | 'PM'
+                    if (!currentH12) {
+                      onChange(date, '')
+                      return
+                    }
+                    const hh = from12(currentH12, ampm)
+                    const mm = currentMinute || '00'
+                    onChange(date, `${hh}:${mm}`)
+                  }}
+                  className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="AM">上午</option>
+                  <option value="PM">下午</option>
+                </select>
+              )}
+              {hour12 ? (
+                <select
+                  value={currentH12}
+                  onChange={(e) => {
+                    const h12 = e.target.value
+                    const hh = h12 ? from12(h12, currentAmpm) : ''
+                    const mm = currentMinute || '00'
+                    onChange(date, hh ? `${hh}:${mm}` : '')
+                  }}
+                  className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">--</option>
+                  {HOUR_OPTIONS_12.map((h) => <option key={h} value={h}>{h}</option>)}
+                </select>
+              ) : (
+                <select
+                  value={currentHour24}
+                  onChange={(e) => {
+                    const hh = e.target.value
+                    const mm = currentMinute || '00'
+                    onChange(date, hh ? `${hh}:${mm}` : '')
+                  }}
+                  className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">--</option>
+                  {HOUR_OPTIONS.map((h) => <option key={h} value={h}>{h}</option>)}
+                </select>
+              )}
               <span className="text-slate-500 text-sm">:</span>
               <select
-                value={time ? snapTo15(time).split(':')[1] : ''}
+                value={currentMinute}
                 onChange={(e) => {
                   const mm = e.target.value
-                  const hh = time ? time.split(':')[0] : '09'
+                  const hh = currentHour24 || (hour12 ? from12('09', 'AM') : '09')
                   onChange(date, mm ? `${hh}:${mm}` : '')
                 }}
                 className="bg-slate-900 border border-slate-600 rounded px-1.5 py-1.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"

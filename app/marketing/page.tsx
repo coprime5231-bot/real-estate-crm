@@ -41,7 +41,7 @@ import CommunityAutocomplete from '@/components/CommunityAutocomplete'
 import ClientBasicInfoTab from '@/components/ClientBasicInfoTab'
 import ClientViewingsTab from '@/components/ClientViewingsTab'
 import BlockItem from '@/components/BlockItem'
-import PropertyDetailModal, { DevProperty, DevStatus } from '@/components/PropertyDetailModal'
+import PropertyDetailModal, { DevProperty, DevStatus, VisitTodo } from '@/components/PropertyDetailModal'
 
 type Tab = 'marketing' | 'entrust' | 'closed' | 'videos' | 'ai'
 
@@ -94,6 +94,33 @@ function composeDatetime(date: string, time: string): string {
   if (!date) return ''
   if (!time) return date // 純日期 2026-04-17
   return `${date}T${time}:00+08:00` // ISO with timezone
+}
+
+// 戶藉地址分區：高雄 / 南部 (嘉義/台南/屏東) / 中北部 (其他、含空)
+type HouseholdRegionKey = 'kaohsiung' | 'south' | 'north'
+function classifyHouseholdRegion(addr?: string): HouseholdRegionKey {
+  const a = (addr || '').trim()
+  if (a.startsWith('高雄市') || a.startsWith('高雄縣') || a.startsWith('高雄')) return 'kaohsiung'
+  if (
+    a.startsWith('嘉義縣') || a.startsWith('嘉義市') || a.startsWith('嘉義') ||
+    a.startsWith('台南市') || a.startsWith('台南縣') || a.startsWith('台南') ||
+    a.startsWith('臺南市') || a.startsWith('臺南縣') || a.startsWith('臺南') ||
+    a.startsWith('屏東縣') || a.startsWith('屏東市') || a.startsWith('屏東')
+  ) return 'south'
+  return 'north'
+}
+
+// 把 ISO datetime 顯示成「5/22 下午 3:00」型式（12 小時制）
+function fmtVisitTime(iso?: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const md = `${d.getMonth() + 1}/${d.getDate()}`
+  const h = d.getHours()
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  const ampm = h >= 12 ? '下午' : '上午'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${md} ${ampm} ${h12}:${mm}`
 }
 
 // SLA 狀態 emoji
@@ -231,14 +258,37 @@ export default function MarketingPage() {
   const [conversationModeOn, setConversationModeOn] = useState(true)
 
   // ===================== 委託 tab 狀態 =====================
-  type EntrustSubTab = '開發信' | '追蹤' | '委託'
+  type EntrustSubTab = '開發' | '追蹤' | '委託'
   type DevLetterFilter = 'pending' | 'sent'
+  // 開發 sub-tab 內的 5 個拜訪/信件 子分頁
+  type DevSubTab = 'visit-property' | 'revisit-property' | 'visit-household' | 'revisit-household' | 'letter'
+  const DEV_SUBTAB_LABEL: Record<DevSubTab, string> = {
+    'visit-property': '拜訪物件地',
+    'revisit-property': '覆訪物件地',
+    'visit-household': '拜訪戶藉地',
+    'revisit-household': '覆訪戶藉地',
+    'letter': '待寄信',
+  }
+  const DEV_SUBTAB_ORDER: DevSubTab[] = [
+    'visit-property',
+    'revisit-property',
+    'visit-household',
+    'revisit-household',
+    'letter',
+  ]
+  const DEV_SUBTAB_VISIT: Record<Exclude<DevSubTab, 'letter'>, VisitTodo> = {
+    'visit-property': '物件地拜訪',
+    'revisit-property': '物件地覆訪',
+    'visit-household': '戶藉地拜訪',
+    'revisit-household': '戶藉地覆訪',
+  }
   const ENTRUST_TAB_TO_STATUS: Record<EntrustSubTab, DevStatus> = {
-    '開發信': '募集',
+    '開發': '募集',
     '追蹤': '追蹤',
     '委託': '委託',
   }
-  const [entrustSubTab, setEntrustSubTab] = useState<EntrustSubTab>('開發信')
+  const [entrustSubTab, setEntrustSubTab] = useState<EntrustSubTab>('開發')
+  const [devSubTab, setDevSubTab] = useState<DevSubTab>('visit-property')
   const [entrustDevLetterFilter, setEntrustDevLetterFilter] = useState<DevLetterFilter>('pending')
   const [entrustSearchTerm, setEntrustSearchTerm] = useState('')
   const [properties, setProperties] = useState<DevProperty[]>([])
@@ -255,6 +305,14 @@ export default function MarketingPage() {
   // 開發信「待寄」勾選 ID（產生標籤用）
   const [selectedDevLetterIds, setSelectedDevLetterIds] = useState<Set<string>>(new Set())
   const [generatingLabels, setGeneratingLabels] = useState(false)
+  // 拜訪卡片 per-id 暫存 picker state（純排程、不做狀態切換）
+  const [visitPicks, setVisitPicks] = useState<Record<string, { date: string; time: string }>>({})
+  const [visitSchedulingId, setVisitSchedulingId] = useState<string | null>(null)
+  // 戶藉地 tab 區域 filter（multi-select）；預設只勾高雄
+  type HouseholdRegion = 'kaohsiung' | 'south' | 'north'
+  const [householdRegions, setHouseholdRegions] = useState<Set<HouseholdRegion>>(
+    () => new Set<HouseholdRegion>(['kaohsiung'])
+  )
 
   // ===================== 成交客戶 tab 狀態 =====================
   const [closedProperties, setClosedProperties] = useState<DevProperty[]>([])
@@ -391,6 +449,46 @@ export default function MarketingPage() {
     []
   )
 
+  // === 拜訪卡片：建立行事曆 ===
+  const setVisitPick = useCallback((id: string, date: string, time: string) => {
+    setVisitPicks((prev) => ({ ...prev, [id]: { date, time } }))
+  }, [])
+
+  const handleScheduleVisit = useCallback(
+    async (id: string) => {
+      const pick = visitPicks[id]
+      if (!pick?.date || !pick?.time) {
+        toast.error('請先選日期和時間')
+        return
+      }
+      const scheduledAt = `${pick.date}T${pick.time}:00+08:00`
+      setVisitSchedulingId(id)
+      try {
+        const res = await fetch('/api/dev/schedule-visit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, scheduledAt }),
+        })
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j?.error || `HTTP ${res.status}`)
+        }
+        toast.success('已加入 Google Calendar')
+        setVisitPicks((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+        await fetchProperties()
+      } catch (e: any) {
+        toast.error(`建立行事曆失敗：${e?.message || e}`)
+      } finally {
+        setVisitSchedulingId(null)
+      }
+    },
+    [visitPicks, fetchProperties]
+  )
+
   const handlePropertyModalSave = useCallback(
     async (id: string, patch: Partial<DevProperty>, opts?: { autoPromoted?: boolean }) => {
       await patchProperty(id, patch)
@@ -465,10 +563,19 @@ export default function MarketingPage() {
   const filteredProperties = useMemo(() => {
     const want = ENTRUST_TAB_TO_STATUS[entrustSubTab]
     let list = properties.filter((p) => p.status === want)
-    if (entrustSubTab === '開發信') {
-      list = list.filter((p) =>
-        entrustDevLetterFilter === 'sent' ? p.devLetter === true : !p.devLetter
-      )
+    if (entrustSubTab === '開發') {
+      if (devSubTab === 'letter') {
+        list = list.filter((p) =>
+          entrustDevLetterFilter === 'sent' ? p.devLetter === true : !p.devLetter
+        )
+      } else {
+        const want = DEV_SUBTAB_VISIT[devSubTab]
+        list = list.filter((p) => p.visitTodo === want)
+        // 戶藉 tab 額外吃區域 filter
+        if (devSubTab === 'visit-household' || devSubTab === 'revisit-household') {
+          list = list.filter((p) => householdRegions.has(classifyHouseholdRegion(p.householdAddress)))
+        }
+      }
     }
     const q = entrustSearchTerm.trim().toLowerCase()
     if (q) {
@@ -484,14 +591,52 @@ export default function MarketingPage() {
     }
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [properties, entrustSubTab, entrustDevLetterFilter, entrustSearchTerm])
+  }, [properties, entrustSubTab, devSubTab, entrustDevLetterFilter, entrustSearchTerm, householdRegions])
 
   const propertyCounts = useMemo(() => {
-    const c: Record<EntrustSubTab, number> = { '開發信': 0, '追蹤': 0, '委託': 0 }
+    const c: Record<EntrustSubTab, number> = { '開發': 0, '追蹤': 0, '委託': 0 }
     for (const p of properties) {
       for (const t of Object.keys(ENTRUST_TAB_TO_STATUS) as EntrustSubTab[]) {
         if (p.status === ENTRUST_TAB_TO_STATUS[t]) c[t]++
       }
+    }
+    return c
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties])
+
+  // 戶藉 tab 內、區域 chip 計數（過濾「該 visitTodo + 募集」後再分區）
+  const householdRegionCounts = useMemo(() => {
+    const c: Record<HouseholdRegion, number> = { kaohsiung: 0, south: 0, north: 0 }
+    if (entrustSubTab !== '開發') return c
+    if (devSubTab !== 'visit-household' && devSubTab !== 'revisit-household') return c
+    const wantVisit = DEV_SUBTAB_VISIT[devSubTab]
+    for (const p of properties) {
+      if (p.status !== '募集') continue
+      if (p.visitTodo !== wantVisit) continue
+      const r = classifyHouseholdRegion(p.householdAddress)
+      c[r]++
+    }
+    return c
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties, entrustSubTab, devSubTab])
+
+  // 開發 sub-tab 內各分頁的計數（僅 募集 物件）
+  const devSubTabCounts = useMemo(() => {
+    const c: Record<DevSubTab, number> = {
+      'visit-property': 0,
+      'revisit-property': 0,
+      'visit-household': 0,
+      'revisit-household': 0,
+      'letter': 0,
+    }
+    for (const p of properties) {
+      if (p.status !== '募集') continue
+      if (p.visitTodo === '物件地拜訪') c['visit-property']++
+      else if (p.visitTodo === '物件地覆訪') c['revisit-property']++
+      else if (p.visitTodo === '戶藉地拜訪') c['visit-household']++
+      else if (p.visitTodo === '戶藉地覆訪') c['revisit-household']++
+      else if (!p.devLetter) c['letter']++
+      // devLetter=true 且 visitTodo 空 → 算「已寄留底」、不計入 letter 待寄（裡面已寄子分頁仍可見）
     }
     return c
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2204,34 +2349,54 @@ export default function MarketingPage() {
               </button>
             </div>
 
-            {/* 開發信 sub-filter（待寄 / 已寄留底） */}
-            {entrustSubTab === '開發信' && (
-              <div className="px-6 py-2 border-b border-slate-700 flex gap-2">
-                <button
-                  onClick={() => setEntrustDevLetterFilter('pending')}
-                  className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded border transition-colors ${
-                    entrustDevLetterFilter === 'pending'
-                      ? 'border-indigo-500 bg-indigo-950/50 text-indigo-200'
-                      : 'border-slate-700 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Send size={12} /> 待寄
-                </button>
-                <button
-                  onClick={() => setEntrustDevLetterFilter('sent')}
-                  className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded border transition-colors ${
-                    entrustDevLetterFilter === 'sent'
-                      ? 'border-emerald-600 bg-emerald-950/40 text-emerald-200'
-                      : 'border-slate-700 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Eye size={12} /> 已寄留底
-                </button>
+            {/* 開發 sub-tabs：拜訪/覆訪/待寄信 */}
+            {entrustSubTab === '開發' && (
+              <div className="px-6 py-2 border-b border-slate-700 flex gap-2 flex-wrap">
+                {DEV_SUBTAB_ORDER.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setDevSubTab(t)}
+                    className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded border transition-colors ${
+                      devSubTab === t
+                        ? 'border-indigo-500 bg-indigo-950/50 text-indigo-200'
+                        : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {t === 'letter' ? <Send size={12} /> : <MapPin size={12} />}
+                    {DEV_SUBTAB_LABEL[t]}
+                    <span className="ml-0.5 opacity-70">{devSubTabCounts[t]}</span>
+                  </button>
+                ))}
+                {/* 待寄信 內的 已寄留底 切換 */}
+                {devSubTab === 'letter' && (
+                  <div className="flex gap-1 ml-2 pl-2 border-l border-slate-700">
+                    <button
+                      onClick={() => setEntrustDevLetterFilter('pending')}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
+                        entrustDevLetterFilter === 'pending'
+                          ? 'border-indigo-500 bg-indigo-950/50 text-indigo-200'
+                          : 'border-slate-700 text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      待寄
+                    </button>
+                    <button
+                      onClick={() => setEntrustDevLetterFilter('sent')}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
+                        entrustDevLetterFilter === 'sent'
+                          ? 'border-emerald-600 bg-emerald-950/40 text-emerald-200'
+                          : 'border-slate-700 text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      <Eye size={11} /> 已寄留底
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* === 開發信 view：卡片版（待寄=完整卡、已寄留底=壓縮列） === */}
-            {entrustSubTab === '開發信' && (
+            {/* === 開發 view：待寄信卡片 (含待寄/已寄留底) === */}
+            {entrustSubTab === '開發' && devSubTab === 'letter' && (
               <div className="px-6 py-5">
                 {propertiesError && (
                   <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-rose-950/40 border border-rose-900/60 rounded text-rose-300 text-sm">
@@ -2411,8 +2576,185 @@ export default function MarketingPage() {
               </div>
             )}
 
+            {/* === 開發 view：拜訪/覆訪 卡片 === */}
+            {entrustSubTab === '開發' && devSubTab !== 'letter' && (
+              <div className="px-6 py-5">
+                {propertiesError && (
+                  <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-rose-950/40 border border-rose-900/60 rounded text-rose-300 text-sm">
+                    <AlertTriangle size={14} />
+                    {propertiesError}
+                  </div>
+                )}
+                {/* 戶藉 tab：區域 filter chip */}
+                {(devSubTab === 'visit-household' || devSubTab === 'revisit-household') && (
+                  <div className="mb-3 flex items-center gap-2 flex-wrap text-xs">
+                    <span className="text-slate-500">區域：</span>
+                    {([
+                      { key: 'kaohsiung' as HouseholdRegion, label: '高雄' },
+                      { key: 'south' as HouseholdRegion, label: '南部' },
+                      { key: 'north' as HouseholdRegion, label: '中北部' },
+                    ]).map(({ key, label }) => {
+                      const on = householdRegions.has(key)
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            setHouseholdRegions((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(key)) next.delete(key)
+                              else next.add(key)
+                              return next
+                            })
+                          }}
+                          className={`px-2.5 py-1 rounded border transition-colors flex items-center gap-1 ${
+                            on
+                              ? 'border-indigo-500 bg-indigo-950/50 text-indigo-200'
+                              : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {label}
+                          <span className="opacity-70">{householdRegionCounts[key]}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {propertiesLoading ? (
+                  <div className="flex items-center justify-center py-16 text-slate-500">
+                    <Loader2 className="animate-spin" size={20} />
+                  </div>
+                ) : filteredProperties.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-sm">
+                    {entrustSearchTerm
+                      ? '沒有符合搜尋的物件'
+                      : (devSubTab === 'visit-household' || devSubTab === 'revisit-household') && householdRegions.size === 0
+                      ? '請至少勾一個區域'
+                      : (devSubTab === 'visit-household' || devSubTab === 'revisit-household') &&
+                        Object.values(householdRegionCounts).some((n) => n > 0)
+                      ? '此區域沒有物件、試試切換區域'
+                      : `目前沒有「${DEV_SUBTAB_LABEL[devSubTab]}」待辦的物件`}
+                  </div>
+                ) : (
+                  <div className="max-w-5xl mx-auto space-y-3">
+                    {filteredProperties.map((prop) => {
+                      const isHousehold = devSubTab === 'visit-household' || devSubTab === 'revisit-household'
+                      const displayAddr = isHousehold ? prop.householdAddress : prop.address
+                      const pick = visitPicks[prop.id] || { date: '', time: '' }
+                      const scheduled = prop.nextVisitAt
+                      const calLink = prop.calendarEventId
+                      const isScheduling = visitSchedulingId === prop.id
+                      return (
+                        <div
+                          key={prop.id}
+                          className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-hidden"
+                        >
+                          {/* 頭：物件名 + 屋主 */}
+                          <div className="px-4 py-2 border-b border-slate-700 flex items-center gap-3 flex-wrap">
+                            <a
+                              href={`https://www.notion.so/${prop.id.replace(/-/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-base font-bold text-white hover:text-indigo-400 transition-colors truncate"
+                              title="開啟 Notion 頁面"
+                            >
+                              {prop.name}
+                            </a>
+                            {prop.owner && (
+                              <span className="text-sm text-slate-300">屋主：{prop.owner}</span>
+                            )}
+                            {prop.ownerPhone && (
+                              <a
+                                href={`tel:${prop.ownerPhone}`}
+                                className="ml-auto text-xs text-slate-400 hover:text-indigo-400 flex items-center gap-1"
+                                title="撥打"
+                              >
+                                <Phone size={12} /> {prop.ownerPhone}
+                              </a>
+                            )}
+                          </div>
+                          {/* 地址 */}
+                          <div className="px-4 py-2 text-sm flex gap-2">
+                            <span className="text-slate-500 shrink-0 w-12">
+                              {isHousehold ? '戶藉：' : '物件：'}
+                            </span>
+                            <span className="text-slate-300 whitespace-pre-wrap break-all">
+                              {displayAddr || <span className="text-slate-600">（未填）</span>}
+                            </span>
+                          </div>
+                          {/* 排程 / 三按鈕 */}
+                          <div className="px-4 py-2 border-t border-slate-700 flex items-center gap-2 flex-wrap">
+                            {scheduled ? (
+                              <>
+                                <span className="text-xs text-indigo-300 flex items-center gap-1.5 bg-indigo-950/40 border border-indigo-800/60 rounded px-2 py-1">
+                                  <Calendar size={12} /> 已排 {fmtVisitTime(scheduled)}
+                                </span>
+                                {calLink && /^https?:\/\//.test(calLink) && (
+                                  <a
+                                    href={calLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-slate-400 hover:text-indigo-400 flex items-center gap-1"
+                                    title="開啟 Google Calendar"
+                                  >
+                                    <ExternalLink size={12} /> 開 Calendar
+                                  </a>
+                                )}
+                                <DateTimePopover
+                                  date={pick.date}
+                                  time={pick.time}
+                                  hour12
+                                  onChange={(d, t) => setVisitPick(prop.id, d, t)}
+                                  title="改時間（會建立新行事曆事件）"
+                                  iconSize={12}
+                                  buttonClass="text-xs text-slate-400 hover:text-indigo-400 border border-slate-700 hover:border-indigo-500 rounded px-2 py-1 flex items-center gap-1"
+                                  activeButtonClass="text-xs text-indigo-300 border border-indigo-500/60 bg-indigo-950/40 rounded px-2 py-1 flex items-center gap-1"
+                                />
+                                {pick.date && pick.time && (
+                                  <button
+                                    onClick={() => handleScheduleVisit(prop.id)}
+                                    disabled={isScheduling}
+                                    className="text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white"
+                                  >
+                                    {isScheduling ? '建立中…' : '改時間'}
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <DateTimePopover
+                                  date={pick.date}
+                                  time={pick.time}
+                                  hour12
+                                  onChange={(d, t) => setVisitPick(prop.id, d, t)}
+                                  title="選日期 + 時間"
+                                  iconSize={14}
+                                  buttonClass="text-xs text-slate-400 hover:text-indigo-400 border border-slate-700 hover:border-indigo-500 rounded px-2 py-1 flex items-center gap-1"
+                                  activeButtonClass="text-xs text-indigo-300 border border-indigo-500/60 bg-indigo-950/40 rounded px-2 py-1 flex items-center gap-1"
+                                />
+                                {pick.date && pick.time && (
+                                  <span className="text-xs text-slate-300">{fmtVisitTime(`${pick.date}T${pick.time}:00+08:00`)}</span>
+                                )}
+                                <button
+                                  onClick={() => handleScheduleVisit(prop.id)}
+                                  disabled={!pick.date || !pick.time || isScheduling}
+                                  className="text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1"
+                                >
+                                  <CalendarPlus size={12} />
+                                  {isScheduling ? '建立中…' : '建立行事曆'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* === 追蹤 / 委託 view：左右欄（鏡像行銷） === */}
-            {entrustSubTab !== '開發信' && (
+            {entrustSubTab !== '開發' && (
             <div className="flex" style={{ height: 'calc(100vh - 280px)', minHeight: '500px' }}>
               {/* 左側列表 */}
               <div className="w-[280px] shrink-0 border-r border-slate-700 overflow-y-auto">

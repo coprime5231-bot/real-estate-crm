@@ -122,7 +122,7 @@ export async function createTimedEvent(
   durationMinutes: number = 30,
   description?: string,
   location?: string
-): Promise<string> {
+): Promise<{ id: string; htmlLink: string }> {
   const cal = getCalendarClient()
   const start = new Date(startISO)
   if (isNaN(start.getTime())) {
@@ -143,5 +143,8 @@ export async function createTimedEvent(
     calendarId: CALENDAR_ID,
     requestBody,
   })
-  return res.data.id || ''
+  return {
+    id: res.data.id || '',
+    htmlLink: res.data.htmlLink || '',
+  }
 }

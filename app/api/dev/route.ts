@@ -36,6 +36,8 @@ export interface DevPropertyData {
   devProgress: string[]
   visitTodo?: VisitTodo
   visitSynced?: VisitTodo
+  nextVisitAt?: string | null
+  calendarEventId?: string
 }
 
 const ACTIVE_STATUSES: DevStatus[] = ['募集', '追蹤', '委託']
@@ -67,6 +69,8 @@ function mapPage(p: any): DevPropertyData {
     devProgress: extractMultiSelectNames(props['開發進度']),
     visitTodo: (extractSelectValue(props['待辦']?.select) || undefined) as VisitTodo | undefined,
     visitSynced: (extractSelectValue(props['已同步']?.select) || undefined) as VisitTodo | undefined,
+    nextVisitAt: props['下次拜訪時間']?.date?.start ?? null,
+    calendarEventId: extractText(props['行事曆ID']?.rich_text || []) || undefined,
   }
 }
 
@@ -129,6 +133,9 @@ type DevMutation = Partial<{
   address: string
   price: string
   ownerGrade: string | null
+  visitTodo: VisitTodo | null
+  nextVisitAt: string | null
+  calendarEventId: string | null
 }>
 
 export async function PATCH(request: NextRequest) {
@@ -170,6 +177,15 @@ export async function PATCH(request: NextRequest) {
     }
     if (body.ownerGrade !== undefined) {
       props['客戶等級'] = body.ownerGrade ? { select: { name: body.ownerGrade } } : { select: null }
+    }
+    if (body.visitTodo !== undefined) {
+      props['待辦'] = body.visitTodo ? { select: { name: body.visitTodo } } : { select: null }
+    }
+    if (body.nextVisitAt !== undefined) {
+      props['下次拜訪時間'] = body.nextVisitAt ? { date: { start: body.nextVisitAt } } : { date: null }
+    }
+    if (body.calendarEventId !== undefined) {
+      props['行事曆ID'] = { rich_text: body.calendarEventId ? [{ text: { content: body.calendarEventId } }] : [] }
     }
     await notion.pages.update({ page_id: body.id, properties: props })
     return NextResponse.json({ ok: true, id: body.id })
