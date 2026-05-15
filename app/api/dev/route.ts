@@ -33,7 +33,6 @@ export interface DevPropertyData {
   objectLetter?: string
   householdLetter?: string
   devLetter?: boolean
-  devProgress: string[]
   visitTodo?: VisitTodo
   visitSynced?: VisitTodo
   nextVisitAt?: string | null
@@ -66,7 +65,6 @@ function mapPage(p: any): DevPropertyData {
     objectLetter: extractText(props['物信']?.rich_text || []) || undefined,
     householdLetter: extractText(props['戶信']?.rich_text || []) || undefined,
     devLetter: props['開發信']?.checkbox === true,
-    devProgress: extractMultiSelectNames(props['開發進度']),
     visitTodo: (extractSelectValue(props['待辦']?.select) || undefined) as VisitTodo | undefined,
     visitSynced: (extractSelectValue(props['已同步']?.select) || undefined) as VisitTodo | undefined,
     nextVisitAt: props['下次拜訪時間']?.date?.start ?? null,
@@ -119,7 +117,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * PATCH /api/dev  body={ id, status?, devLetter?, closingDate?, expiry?, important?, devProgress? }
+ * PATCH /api/dev  body={ id, status?, devLetter?, closingDate?, expiry?, important? }
  */
 type DevMutation = Partial<{
   status: DevStatus | null
@@ -127,7 +125,6 @@ type DevMutation = Partial<{
   closingDate: string | null
   expiry: string | null
   important: string
-  devProgress: string[]
   ownerPhone: string | null
   owner: string
   address: string
@@ -159,9 +156,6 @@ export async function PATCH(request: NextRequest) {
     }
     if (body.important !== undefined) {
       props['重要事項'] = { rich_text: body.important ? [{ text: { content: body.important } }] : [] }
-    }
-    if (body.devProgress !== undefined) {
-      props['開發進度'] = { multi_select: (body.devProgress || []).map((n) => ({ name: n })) }
     }
     if (body.ownerPhone !== undefined) {
       props['手機'] = { phone_number: body.ownerPhone || null }

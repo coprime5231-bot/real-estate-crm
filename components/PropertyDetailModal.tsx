@@ -22,7 +22,6 @@ export interface DevProperty {
   objectLetter?: string
   householdLetter?: string
   devLetter?: boolean
-  devProgress: string[]
   visitTodo?: VisitTodo
   nextVisitAt?: string | null
   calendarEventId?: string
@@ -171,22 +170,6 @@ export default function PropertyDetailModal({
                   <p className="text-amber-300/90 bg-amber-950/30 border border-amber-900/40 rounded px-3 py-2 text-sm whitespace-pre-wrap">
                     ⚠ {form.important}
                   </p>
-                </div>
-              )}
-
-              {form.devProgress.length > 0 && (
-                <div>
-                  <p className="text-sm text-slate-400 mb-1">開發進度</p>
-                  <div className="flex flex-wrap gap-1">
-                    {form.devProgress.map((p) => (
-                      <span
-                        key={p}
-                        className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-200 border border-slate-600"
-                      >
-                        {p}
-                      </span>
-                    ))}
-                  </div>
                 </div>
               )}
             </>

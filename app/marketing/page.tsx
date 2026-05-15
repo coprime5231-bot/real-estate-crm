@@ -2951,26 +2951,6 @@ export default function MarketingPage() {
                           <p className="text-xs text-slate-500 mt-3">目前無待辦事項</p>
                         </div>
 
-                        {/* ③ 之前進度（沿用 devProgress） */}
-                        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                          <h3 className="text-sm font-semibold text-slate-400 mb-3 flex items-center gap-2">
-                            <Clock size={14} />
-                            之前進度
-                            {selectedProperty.devProgress.length > 0 && (
-                              <span className="text-xs text-slate-500 font-normal">({selectedProperty.devProgress.length})</span>
-                            )}
-                          </h3>
-                          {selectedProperty.devProgress.length === 0 ? (
-                            <p className="text-xs text-slate-500">尚無進度記錄</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {selectedProperty.devProgress.map((dp, i) => (
-                                <p key={`${dp}-${i}`} className="text-sm text-slate-400">{dp}</p>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
                         {/* ④ 目前進度（skeleton、wiring 後續細修） */}
                         <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                           <h3 className="text-sm font-semibold text-indigo-400 mb-3">目前進度</h3>

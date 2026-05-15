@@ -23,7 +23,6 @@ function mapDev(p: any) {
     ownerPhone: props['手機']?.phone_number || undefined,
     price: extractText(props['開價']?.rich_text || []) || undefined,
     closingDate: props['成交日期']?.date?.start ?? null,
-    devProgress: [] as string[],
     source: 'dev' as const,
   }
 }
@@ -39,7 +38,6 @@ function mapBuyer(p: any) {
     ownerPhone: props['手機']?.phone_number || undefined,
     price: undefined,
     closingDate: props['成交日期']?.date?.start ?? null,
-    devProgress: [] as string[],
     source: 'buyer' as const,
   }
 }
