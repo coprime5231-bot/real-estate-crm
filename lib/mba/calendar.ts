@@ -11,6 +11,7 @@
 
 import type { RawCalendarEvent } from './google-calendar'
 import type { ViewingExtras } from './viewings'
+import type { VisitExtras } from './visit-extras'
 
 export type TaskKind = 'visit_revisit' | 'visit' | 'viewing'
 
@@ -42,6 +43,8 @@ export interface TodayTask extends MbaTaskCard {
   isDone: boolean
   /** 帶看延伸欄位（從 PG viewings 讀）；非帶看事件或查無資料則為 null */
   viewingExtras: ViewingExtras | null
+  /** 拜訪延伸欄位（從 Notion 開發 DB 讀）；非拜訪事件或查無資料則為 null */
+  visitExtras: VisitExtras | null
 }
 
 /**

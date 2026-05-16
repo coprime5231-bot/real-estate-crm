@@ -246,6 +246,112 @@ export default function TodayTaskList({ tasks }: { tasks: TodayTask[] }) {
                   </div>
                 )}
 
+                {!done &&
+                  (t.kind === 'visit' || t.kind === 'visit_revisit') &&
+                  t.visitExtras && (
+                    <div
+                      style={{
+                        marginTop: 14,
+                        display: 'flex',
+                        gap: 10,
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                      }}
+                    >
+                      {t.visitExtras.occupancy && (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '8px 14px',
+                            fontSize: 17,
+                            fontWeight: 600,
+                            borderRadius: 8,
+                            background:
+                              t.visitExtras.occupancy === '空屋'
+                                ? 'rgba(52,211,153,0.18)'
+                                : t.visitExtras.occupancy === '自住'
+                                  ? 'rgba(251,146,60,0.18)'
+                                  : '#3A4055',
+                            color:
+                              t.visitExtras.occupancy === '空屋'
+                                ? '#6EE7B7'
+                                : t.visitExtras.occupancy === '自住'
+                                  ? '#FDBA74'
+                                  : '#C8CCD8',
+                          }}
+                        >
+                          {t.visitExtras.occupancy}
+                        </span>
+                      )}
+                      {t.visitExtras.area && (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '8px 14px',
+                            fontSize: 17,
+                            borderRadius: 8,
+                            background: '#3A4055',
+                            color: '#C8CCD8',
+                          }}
+                        >
+                          {t.visitExtras.area.endsWith('坪')
+                            ? t.visitExtras.area
+                            : `${t.visitExtras.area}坪`}
+                        </span>
+                      )}
+                      {t.visitExtras.price && (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '8px 14px',
+                            fontSize: 17,
+                            borderRadius: 8,
+                            background: '#3A4055',
+                            color: '#C8CCD8',
+                          }}
+                        >
+                          {t.visitExtras.price.endsWith('萬')
+                            ? t.visitExtras.price
+                            : `${t.visitExtras.price}萬`}
+                        </span>
+                      )}
+                      {t.visitExtras.layout && (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '8px 14px',
+                            fontSize: 17,
+                            borderRadius: 8,
+                            background: '#3A4055',
+                            color: '#C8CCD8',
+                          }}
+                        >
+                          {t.visitExtras.layout}
+                        </span>
+                      )}
+                      {t.visitExtras.web && (
+                        <a
+                          href={t.visitExtras.web}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-block',
+                            padding: '12px 20px',
+                            minHeight: 44,
+                            fontSize: 18,
+                            fontWeight: 600,
+                            borderRadius: 8,
+                            background: '#3A4055',
+                            color: '#FFD86B',
+                            textDecoration: 'none',
+                          }}
+                        >
+                          社區
+                        </a>
+                      )}
+                    </div>
+                  )}
+
                 {!done && t.kind === 'viewing' && t.viewingExtras && (
                   <div style={{ marginTop: 14, fontSize: 18, lineHeight: 1.7 }}>
                     {(t.viewingExtras.communityLejuUrl ||

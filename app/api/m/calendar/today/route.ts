@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { listTodayEvents } from '@/lib/mba/google-calendar'
 import { parseTodayEvents } from '@/lib/mba/calendar'
 import { getViewingByCalendarEventId } from '@/lib/mba/viewings'
+import { getVisitExtrasFromDescription } from '@/lib/mba/visit-extras'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,10 +28,18 @@ export async function GET() {
                 return null
               })
             : null
+        const visitExtras =
+          c.kind === 'visit' || c.kind === 'visit_revisit'
+            ? await getVisitExtrasFromDescription(c.description).catch((err) => {
+                console.error('[api/m/calendar/today] visit-extras lookup failed:', err)
+                return null
+              })
+            : null
         return {
           ...c,
           isDone: c.colorId === '8',
           viewingExtras,
+          visitExtras,
         }
       })
     )
