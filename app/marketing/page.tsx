@@ -2200,27 +2200,32 @@ export default function MarketingPage() {
                       {clientBlocks.length === 0 ? (
                         <p className="text-xs text-slate-500">尚無進度記錄</p>
                       ) : (
-                        <div className="space-y-1">
-                          {[...clientBlocks]
-                            .sort((a, b) => {
-                              const at = a.createdTime ? new Date(a.createdTime).getTime() : 0
-                              const bt = b.createdTime ? new Date(b.createdTime).getTime() : 0
-                              return at - bt
-                            })
-                            .map((block) => (
-                              <BlockItem
-                                key={block.id}
-                                block={block}
-                                onUpdate={(patch) =>
-                                  setClientBlocks((prev) =>
-                                    prev.map((b) => (b.id === block.id ? { ...b, ...patch } : b))
-                                  )
-                                }
-                                onDelete={() =>
-                                  setClientBlocks((prev) => prev.filter((b) => b.id !== block.id))
-                                }
-                              />
-                            ))}
+                        <div
+                          className="overflow-y-auto pr-1"
+                          style={{ maxHeight: '10rem' }}
+                        >
+                          <div className="space-y-1">
+                            {[...clientBlocks]
+                              .sort((a, b) => {
+                                const at = a.createdTime ? new Date(a.createdTime).getTime() : 0
+                                const bt = b.createdTime ? new Date(b.createdTime).getTime() : 0
+                                return at - bt
+                              })
+                              .map((block) => (
+                                <BlockItem
+                                  key={block.id}
+                                  block={block}
+                                  onUpdate={(patch) =>
+                                    setClientBlocks((prev) =>
+                                      prev.map((b) => (b.id === block.id ? { ...b, ...patch } : b))
+                                    )
+                                  }
+                                  onDelete={() =>
+                                    setClientBlocks((prev) => prev.filter((b) => b.id !== block.id))
+                                  }
+                                />
+                              ))}
+                          </div>
                         </div>
                       )}
                     </div>

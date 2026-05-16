@@ -6,13 +6,21 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const response = await notion.blocks.children.list({
-      block_id: params.id,
-      page_size: 100,
-    })
+    // 分頁抓完整個頁面內文（Notion 一頁最多 100 block、舊客戶內文常 > 100）
+    const allBlocks: any[] = []
+    let cursor: string | undefined = undefined
+    do {
+      const response: any = await notion.blocks.children.list({
+        block_id: params.id,
+        page_size: 100,
+        start_cursor: cursor,
+      })
+      allBlocks.push(...response.results)
+      cursor = response.has_more ? response.next_cursor : undefined
+    } while (cursor)
 
     // 只取文字類型的 block（paragraph, bulleted_list_item 等）
-    const textBlocks = response.results
+    const textBlocks = allBlocks
       .filter((block: any) => {
         const type = block.type
         return ['paragraph', 'bulleted_list_item', 'numbered_list_item', 'heading_1', 'heading_2', 'heading_3'].includes(type)
@@ -29,10 +37,10 @@ export async function GET(
       })
       .filter((b: any) => b.text.trim() !== '')
 
-    // 取最後 3 筆，倒序（最新在上）
-    const last3 = textBlocks.slice(-3).reverse()
+    // 全部回傳，倒序（最新在上）。前端「之前進度」卡固定高度 + 捲動看歷史
+    const ordered = [...textBlocks].reverse()
 
-    return NextResponse.json(last3)
+    return NextResponse.json(ordered)
   } catch (error: any) {
     console.error('Failed to fetch blocks:', error)
     return NextResponse.json({ error: '無法獲取進度記錄', detail: error?.message }, { status: 500 })
