@@ -316,6 +316,9 @@ export default function MarketingPage() {
   // 委託 tab 右側 sub-tab（鏡像行銷的 detailTab）
   type EntrustDetailTab = 'latest' | 'basic' | 'records'
   const [entrustDetailTab, setEntrustDetailTab] = useState<EntrustDetailTab>('latest')
+  // 委託案子的重要/待辦（來自開發頁 本周重要大事/待辦事項 relation）
+  const [entrustImportantItems, setEntrustImportantItems] = useState<{ id: string; title: string }[]>([])
+  const [entrustTodos, setEntrustTodos] = useState<{ id: string; title: string }[]>([])
   // 開發信「已寄出」按下時的 fade-to-grey 動畫狀態
   const [fadingDevLetters, setFadingDevLetters] = useState<Set<string>>(new Set())
   // 開發信「待寄」勾選 ID（產生標籤用）
@@ -752,6 +755,27 @@ export default function MarketingPage() {
       fetchClientDetail(selectedClientId)
     }
   }, [selectedClientId, fetchClientDetail])
+
+  // 委託案子：載入該案子的重要/待辦（開發頁 relation）
+  useEffect(() => {
+    if (!selectedPropertyId) {
+      setEntrustImportantItems([])
+      setEntrustTodos([])
+      return
+    }
+    let cancelled = false
+    fetch(`/api/dev/${selectedPropertyId}/items`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return
+        setEntrustImportantItems(Array.isArray(d?.important) ? d.important : [])
+        setEntrustTodos(Array.isArray(d?.todos) ? d.todos : [])
+      })
+      .catch((err) => console.error('fetch entrust items failed:', err))
+    return () => {
+      cancelled = true
+    }
+  }, [selectedPropertyId])
 
   // === A1. 收合 localStorage 同步（一鍵同收重要事項 + 待辦） ===
   const toggleDashboardCollapsed = useCallback(() => {
@@ -1290,6 +1314,34 @@ export default function MarketingPage() {
       setImportantItems((prev) => prev.filter((i) => i.id !== itemId))
     } catch (err) {
       console.error('Complete important error:', err)
+    }
+  }
+
+  // 委託案子：完成重要事項（PATCH 同行銷、只更新委託清單）
+  const handleCompleteEntrustImportant = async (itemId: string) => {
+    try {
+      await fetch(`/api/important-items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'done' }),
+      })
+      setEntrustImportantItems((prev) => prev.filter((i) => i.id !== itemId))
+    } catch (err) {
+      console.error('Complete entrust important error:', err)
+    }
+  }
+
+  // 委託案子：完成待辦（PATCH 待辦 checkbox=true、只更新委託清單）
+  const handleCompleteEntrustTodo = async (todoId: string) => {
+    try {
+      await fetch(`/api/clients/todos/${todoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ todoFlag: true }),
+      })
+      setEntrustTodos((prev) => prev.filter((t) => t.id !== todoId))
+    } catch (err) {
+      console.error('Complete entrust todo error:', err)
     }
   }
 
@@ -2833,56 +2885,67 @@ export default function MarketingPage() {
 
                     {entrustDetailTab === 'latest' && (
                       <div className="space-y-4">
-                        {/* ① 重要事項（鏡像行銷「重要大事」、wiring 後續細修） */}
+                        {/* ① 重要事項（案子 relation；新增於下一階段開放） */}
                         <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
                             <h3 className="text-sm font-semibold text-amber-400 flex items-center gap-2 shrink-0">
                               <Star size={14} />
                               重要事項
                             </h3>
-                            <input
-                              type="text"
-                              placeholder="新增重要事項...（尚未串接）"
-                              disabled
-                              className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-                            />
-                            <button
-                              disabled
-                              className="px-2.5 py-1 bg-amber-600 disabled:opacity-50 text-white text-sm rounded shrink-0"
-                            >
-                              <Plus size={14} />
-                            </button>
+                            <span className="text-[11px] text-slate-600">（新增功能下一階段開放）</span>
                           </div>
-                          {selectedProperty.important ? (
-                            <div className="mt-3 text-xs text-amber-300/80 bg-amber-950/30 border border-amber-900/40 rounded px-2 py-1.5">
+                          {selectedProperty.important && (
+                            <div className="mt-3 text-xs text-amber-300/80 bg-amber-950/30 border border-amber-900/40 rounded px-2 py-1.5 whitespace-pre-wrap">
                               ⚠ {selectedProperty.important}
                             </div>
-                          ) : (
+                          )}
+                          {entrustImportantItems.length === 0 ? (
                             <p className="text-xs text-slate-500 mt-3">目前無重要事項</p>
+                          ) : (
+                            <div className="space-y-2 mt-3">
+                              {entrustImportantItems.map((item) => (
+                                <div key={item.id} className="flex items-center justify-between text-sm">
+                                  <span className="text-slate-300">{item.title}</span>
+                                  <button
+                                    onClick={() => handleCompleteEntrustImportant(item.id)}
+                                    className="text-xs text-slate-500 hover:text-green-400 transition-colors shrink-0"
+                                    title="標記完成"
+                                  >
+                                    完成
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
 
-                        {/* ② 待辦事項（skeleton、wiring 後續細修） */}
+                        {/* ② 待辦事項（案子 relation；新增於下一階段開放） */}
                         <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
                             <h3 className="text-sm font-semibold text-green-400 flex items-center gap-2 shrink-0">
                               <CheckSquare size={14} />
                               待辦事項
                             </h3>
-                            <input
-                              type="text"
-                              placeholder="新增待辦...（尚未串接）"
-                              disabled
-                              className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-                            />
-                            <button
-                              disabled
-                              className="px-2.5 py-1 bg-green-600 disabled:opacity-50 text-white text-sm rounded shrink-0"
-                            >
-                              <Plus size={14} />
-                            </button>
+                            <span className="text-[11px] text-slate-600">（新增功能下一階段開放）</span>
                           </div>
-                          <p className="text-xs text-slate-500 mt-3">目前無待辦事項</p>
+                          {entrustTodos.length === 0 ? (
+                            <p className="text-xs text-slate-500 mt-3">目前無待辦事項</p>
+                          ) : (
+                            <div className="space-y-1.5 mt-3">
+                              {entrustTodos.map((todo) => (
+                                <div key={todo.id} className="flex items-center gap-2 text-sm">
+                                  <button
+                                    onClick={() => handleCompleteEntrustTodo(todo.id)}
+                                    className="text-slate-500 hover:text-green-400 transition-colors shrink-0"
+                                    title="標記完成"
+                                  >
+                                    <Square size={14} />
+                                  </button>
+                                  <span className="text-slate-300">{todo.title}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         {/* ④ 目前進度（skeleton、wiring 後續細修） */}
