@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
+import { strikeItemBodyLine } from '@/lib/notion-body-log'
 
 export async function PATCH(
   request: NextRequest,
@@ -17,6 +18,11 @@ export async function PATCH(
       page_id: params.id,
       properties: updateProperties,
     })
+
+    // 完成 → 客戶內文那一行加刪除線（只劃線、留著）。best-effort
+    if (body.status === 'done') {
+      await strikeItemBodyLine(params.id, true)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

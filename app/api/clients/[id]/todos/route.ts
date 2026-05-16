@@ -1,6 +1,7 @@
 // 儲存路徑：app/api/clients/[id]/todos/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
+import { appendClientBodyLine, saveBodyBlockId, formatBodyLine } from '@/lib/notion-body-log'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,6 +84,14 @@ export async function POST(
       parent: { database_id: todoDbId },
       properties,
     })
+
+    // 回寫一行到客戶頁面內文（params.id = 客戶頁 id）、記下 block id。best-effort
+    const blockId = await appendClientBodyLine(
+      params.id,
+      formatBodyLine('待辦', title),
+    )
+    if (blockId) await saveBodyBlockId(page.id, blockId)
+
     return NextResponse.json({
       id: page.id,
       title,

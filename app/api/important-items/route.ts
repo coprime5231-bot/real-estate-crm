@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion, { extractText } from '@/lib/notion'
+import { appendClientBodyLine, saveBodyBlockId, formatBodyLine } from '@/lib/notion-body-log'
 
 const IMPORTANT_DB_ID = process.env.NOTION_IMPORTANT_DB_ID!
 
@@ -92,6 +93,15 @@ export async function POST(request: NextRequest) {
       parent: { database_id: IMPORTANT_DB_ID },
       properties,
     })
+
+    // 綁定客戶時：回寫一行到客戶頁面內文、記下 block id（完成時據此劃線）。best-effort
+    if (clientId) {
+      const blockId = await appendClientBodyLine(
+        clientId,
+        formatBodyLine('重要', title.trim()),
+      )
+      if (blockId) await saveBodyBlockId(page.id, blockId)
+    }
 
     return NextResponse.json({
       id: page.id,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import notion from '@/lib/notion'
+import { appendClientBodyLine, saveBodyBlockId, formatBodyLine } from '@/lib/notion-body-log'
 
 const TODO_DB_ID = process.env.NOTION_TODO_DB_ID!
 const BUYER_DB_ID = process.env.NOTION_BUYER_DB_ID!
@@ -132,6 +133,15 @@ export async function POST(request: NextRequest) {
       parent: { database_id: TODO_DB_ID },
       properties,
     })
+
+    // 綁定客戶時：回寫一行到客戶頁面內文、記下 block id（完成時據此劃線）。best-effort
+    if (body.clientId) {
+      const blockId = await appendClientBodyLine(
+        body.clientId,
+        formatBodyLine('待辦', title),
+      )
+      if (blockId) await saveBodyBlockId(page.id, blockId)
+    }
 
     return NextResponse.json({
       id: page.id,
