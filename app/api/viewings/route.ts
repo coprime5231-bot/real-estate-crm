@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       colleagueName,
       colleaguePhone,
       note,
+      ycutCaseIdx,
     } = body
 
     // 必填檢查
@@ -85,8 +86,8 @@ export async function POST(request: NextRequest) {
         `INSERT INTO viewings (
           calendar_event_id, notion_buyer_id, datetime, location,
           community_name, community_url, community_leju_url,
-          colleague_name, colleague_phone, note
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          colleague_name, colleague_phone, note, ycut_case_idx
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id, created_at`,
         [
           calendarEventId,
@@ -99,6 +100,7 @@ export async function POST(request: NextRequest) {
           colleagueName.trim(),
           colleaguePhone.trim(),
           note?.trim() || null,
+          (typeof ycutCaseIdx === 'string' && ycutCaseIdx.trim()) ? ycutCaseIdx.trim() : null,
         ]
       )
       const row = insertRes.rows[0]

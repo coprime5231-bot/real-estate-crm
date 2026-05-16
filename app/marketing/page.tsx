@@ -1291,6 +1291,7 @@ export default function MarketingPage() {
           colleagueName: viewingColleagueName.trim(),
           colleaguePhone: viewingColleaguePhone.trim(),
           note: viewingNote.trim() || undefined,
+          ycutCaseIdx: ycutCaseIdx || undefined,
         }),
       })
       const data = await res.json()

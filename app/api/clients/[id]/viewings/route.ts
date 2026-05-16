@@ -23,7 +23,8 @@ export async function GET(
       `SELECT
          id, calendar_event_id, notion_buyer_id, datetime, location,
          community_name, community_url, community_leju_url,
-         colleague_name, colleague_phone, note, opinion, created_at
+         colleague_name, colleague_phone, note, opinion, created_at,
+         ycut_case_idx
        FROM viewings
        WHERE notion_buyer_id = $1
        ORDER BY

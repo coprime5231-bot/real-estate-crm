@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ExternalLink, Trash2 } from 'lucide-react'
+import { ExternalLink, Trash2, Printer } from 'lucide-react'
 import type { Viewing, ViewingOpinion } from '@/lib/types'
 
 interface Props {
@@ -233,6 +233,23 @@ export default function ViewingCard({ viewing, onUpdate, onDelete }: Props) {
               </a>
             ) : (
               <span className="text-sm text-white font-medium truncate">{titleText}</span>
+            )}
+            {viewing.ycut_case_idx && (
+              <button
+                type="button"
+                onClick={() => {
+                  const empNo = process.env.NEXT_PUBLIC_YCUT_EMP_NO || 'C30419'
+                  const url = `https://is.ycut.com.tw/case/report/market/redirect?caseIdx=${encodeURIComponent(
+                    viewing.ycut_case_idx!,
+                  )}&empNo=${encodeURIComponent(empNo)}&autoPrint=1`
+                  window.open(url, '_blank', 'noopener,noreferrer')
+                }}
+                title="列印 i智慧 成交行情"
+                className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 border border-slate-600 hover:border-sky-500 hover:text-sky-300 text-slate-400 text-xs rounded transition-colors"
+              >
+                <Printer size={12} />
+                列印
+              </button>
             )}
           </div>
           <div className="text-xs text-slate-400 mt-1">

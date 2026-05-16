@@ -111,6 +111,7 @@ export interface Viewing {
   note: string | null
   opinion: ViewingOpinion
   created_at: string
+  ycut_case_idx?: string | null
 }
 
 export interface Conversation {
