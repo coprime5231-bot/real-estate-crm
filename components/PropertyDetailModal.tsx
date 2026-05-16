@@ -18,6 +18,10 @@ export interface DevProperty {
   important?: string
   ownerPhone?: string
   ownerGrade?: string
+  occupancy?: string
+  area?: string
+  layout?: string
+  web?: string
   price?: string
   objectLetter?: string
   householdLetter?: string
