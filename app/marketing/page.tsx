@@ -268,7 +268,14 @@ export default function MarketingPage() {
   const [promptFollowUpTime, setPromptFollowUpTime] = useState('')
 
   const progressInputRef = useRef<HTMLTextAreaElement>(null)
+  const prevProgressScrollRef = useRef<HTMLDivElement>(null)
   const [conversationModeOn, setConversationModeOn] = useState(true)
+
+  // 之前進度：載入 / 換客戶 / 新增後自動捲到底（排序舊上新下、預設停在最新）
+  useEffect(() => {
+    const el = prevProgressScrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [clientBlocks])
 
   // ===================== 委託 tab 狀態 =====================
   type EntrustSubTab = '開發' | '追蹤' | '委託'
@@ -2201,6 +2208,7 @@ export default function MarketingPage() {
                         <p className="text-xs text-slate-500">尚無進度記錄</p>
                       ) : (
                         <div
+                          ref={prevProgressScrollRef}
                           className="overflow-y-auto pr-1"
                           style={{ maxHeight: '10rem' }}
                         >
