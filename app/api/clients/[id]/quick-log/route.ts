@@ -67,6 +67,18 @@ export async function POST(
       notionAppendFailed = true
     }
 
+    // Step 2.5: 存 block id 回 conversations（編輯時據此同步 Notion 內文）。best-effort
+    if (blockId && conversation?.id) {
+      try {
+        await pool.query(
+          `UPDATE conversations SET notion_block_id = $1 WHERE id = $2`,
+          [blockId, conversation.id],
+        )
+      } catch (error: any) {
+        console.error('Failed to save notion_block_id:', error?.message || error)
+      }
+    }
+
     // Step 3: Notion pages.update 日期 +3（容錯）
     const followUpDate = new Date()
     followUpDate.setDate(followUpDate.getDate() + 3)

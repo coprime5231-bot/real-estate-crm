@@ -120,4 +120,6 @@ export interface Conversation {
   content: string
   created_at: string
   updated_at: string
+  notion_block_id?: string | null
+  is_important?: boolean
 }

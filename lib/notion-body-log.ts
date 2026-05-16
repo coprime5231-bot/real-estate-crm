@@ -126,3 +126,42 @@ export async function strikeItemBodyLine(
   if (!blockId) return
   await setBodyBlockStrike(blockId, on)
 }
+
+/**
+ * 洽談內文行格式：`[M/D 📞 洽談] content`（對齊 quick-log 寫入格式）。
+ * dateStr 可能是 'YYYY-MM-DD' 或 ISO；直接抓 Y-M-D 避免時區位移。
+ */
+export function formatConversationBodyLine(
+  dateInput: string | Date,
+  content: string,
+): string {
+  // PG DATE 經 node-pg 回來是 Date 物件、API JSON 來是 ISO 或 'YYYY-MM-DD'
+  // 一律走 Date → toISOString → 抓 Y-M-D（pg DATE = UTC 午夜、不會位移日）
+  const d = dateInput instanceof Date ? dateInput : new Date(String(dateInput))
+  const iso = isNaN(d.getTime()) ? '' : d.toISOString()
+  const m = iso.match(/(\d{4})-(\d{2})-(\d{2})/)
+  const md = m ? `${Number(m[2])}/${Number(m[3])}` : ''
+  return `[${md} 📞 洽談] ${content}`.trim()
+}
+
+/**
+ * 改某 block 的純文字內容（保留 block type、不帶 annotations）。best-effort。
+ * 洽談編輯時同步 Notion 內文用。
+ */
+export async function updateBodyBlockText(
+  blockId: string,
+  text: string,
+): Promise<void> {
+  if (!blockId || !text) return
+  try {
+    const block: any = await notion.blocks.retrieve({ block_id: blockId })
+    const type: string = block?.type
+    if (!type || !block?.[type]?.rich_text) return
+    await notion.blocks.update({
+      block_id: blockId,
+      [type]: { rich_text: [{ type: 'text', text: { content: text } }] },
+    } as any)
+  } catch (err: any) {
+    console.error('[notion-body-log] updateBodyBlockText failed:', err?.message || err)
+  }
+}

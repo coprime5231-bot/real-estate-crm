@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, Trash2 } from 'lucide-react'
 import type { Viewing, ViewingOpinion } from '@/lib/types'
 
 interface Props {
   viewing: Viewing
   onUpdate: (patch: Partial<Viewing>) => void
+  onDelete?: () => void
 }
 
 // 樓層 regex：match「3樓 / 三樓 / 12樓」放在 location 尾段附近
@@ -27,11 +28,12 @@ function formatMonthDay(iso: string | null | undefined): string {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-export default function ViewingCard({ viewing, onUpdate }: Props) {
+export default function ViewingCard({ viewing, onUpdate, onDelete }: Props) {
   const [toggling, setToggling] = useState<'liked' | 'disliked' | null>(null)
   const [editingNote, setEditingNote] = useState(false)
   const [noteDraft, setNoteDraft] = useState(viewing.note || '')
   const [savingNote, setSavingNote] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const noteRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null)
 
   useEffect(() => {
@@ -106,6 +108,22 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
     }
   }
 
+  const handleDelete = async () => {
+    if (deleting) return
+    if (!window.confirm('確定刪除此筆帶看記錄？')) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/viewings/${viewing.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('DELETE failed')
+      onDelete?.()
+      toast.success('已刪除')
+    } catch (err: any) {
+      console.error('delete viewing failed:', err)
+      toast.error('刪除失敗、請重試')
+      setDeleting(false)
+    }
+  }
+
   const opinion = viewing.opinion
 
   // === disliked 態：縮小收合灰 ===
@@ -176,6 +194,14 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
           title="取消不喜歡"
         >
           ⚫
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="shrink-0 p-1 text-slate-600 hover:text-red-400 disabled:opacity-40 transition-colors"
+          title="刪除此筆帶看記錄"
+        >
+          <Trash2 size={12} />
         </button>
       </div>
     )
@@ -269,6 +295,14 @@ export default function ViewingCard({ viewing, onUpdate }: Props) {
         >
           <span>⚫</span>
           <span>不喜歡</span>
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="ml-auto shrink-0 p-1 text-slate-500 hover:text-red-400 disabled:opacity-40 transition-colors"
+          title="刪除此筆帶看記錄"
+        >
+          <Trash2 size={14} />
         </button>
       </div>
     </div>

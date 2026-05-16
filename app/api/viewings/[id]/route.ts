@@ -107,3 +107,30 @@ export async function PATCH(
     )
   }
 }
+
+/**
+ * DELETE /api/viewings/[id]
+ * 刪除帶看記錄（PG）。Notion 內文不回溯刪（與洽談刪除同性質）。
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const idNum = parseInt(params.id, 10)
+  if (!Number.isFinite(idNum)) {
+    return NextResponse.json({ error: 'invalid id' }, { status: 400 })
+  }
+  try {
+    const res = await pool.query(`DELETE FROM viewings WHERE id = $1`, [idNum])
+    if (res.rowCount === 0) {
+      return NextResponse.json({ error: '找不到帶看記錄' }, { status: 404 })
+    }
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    console.error('DELETE viewings failed:', err?.message || err)
+    return NextResponse.json(
+      { error: '刪除帶看失敗', detail: err?.message },
+      { status: 500 }
+    )
+  }
+}

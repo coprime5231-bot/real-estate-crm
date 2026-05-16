@@ -16,7 +16,8 @@ export async function GET(
 
   try {
     const res = await pool.query(
-      `SELECT id, notion_buyer_id, date, content, created_at, updated_at
+      `SELECT id, notion_buyer_id, date, content, created_at, updated_at,
+              notion_block_id, is_important
        FROM conversations
        WHERE notion_buyer_id = $1
        ORDER BY date DESC, id DESC`,

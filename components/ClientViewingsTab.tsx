@@ -14,12 +14,18 @@ type ViewingCardItem = { type: 'viewing'; data: Viewing }
 type ConversationCardItem = { type: 'conversation'; data: Conversation }
 type CardItem = ViewingCardItem | ConversationCardItem
 
-// 排序規則：🟣 喜歡置頂 → 其他全部（洽談卡 + 預設帶看卡 + ⚫ 不喜歡）按日期新到舊混排
+// 排序三層：🟣 帶看喜歡置頂 → 🟠 洽談重要次頂 → 其餘（預設帶看 + ⚫不喜歡 + 非重要洽談）按日期新到舊
+function cardRank(c: CardItem): number {
+  if (c.type === 'viewing' && c.data.opinion === 'liked') return 0
+  if (c.type === 'conversation' && c.data.is_important) return 1
+  return 2
+}
+
 function sortCards(cards: CardItem[]): CardItem[] {
   return [...cards].sort((a, b) => {
-    const aLiked = a.type === 'viewing' && a.data.opinion === 'liked'
-    const bLiked = b.type === 'viewing' && b.data.opinion === 'liked'
-    if (aLiked !== bLiked) return aLiked ? -1 : 1
+    const ra = cardRank(a)
+    const rb = cardRank(b)
+    if (ra !== rb) return ra - rb
 
     const aTime = a.type === 'viewing' ? a.data.datetime : a.data.date
     const bTime = b.type === 'viewing' ? b.data.datetime : b.data.date
@@ -63,6 +69,10 @@ export default function ClientViewingsTab({ clientId }: Props) {
 
   const handleViewingUpdate = (id: number, patch: Partial<Viewing>) => {
     setViewings((prev) => prev.map((v) => (v.id === id ? { ...v, ...patch } : v)))
+  }
+
+  const handleViewingDelete = (id: number) => {
+    setViewings((prev) => prev.filter((v) => v.id !== id))
   }
 
   const handleConversationUpdate = (id: number, patch: Partial<Conversation>) => {
@@ -114,6 +124,7 @@ export default function ClientViewingsTab({ clientId }: Props) {
             key={`v-${card.data.id}`}
             viewing={card.data}
             onUpdate={(patch) => handleViewingUpdate(card.data.id, patch)}
+            onDelete={() => handleViewingDelete(card.data.id)}
           />
         ) : (
           <ConversationCard
