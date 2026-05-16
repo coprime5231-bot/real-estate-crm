@@ -183,10 +183,6 @@ export default function MarketingPage() {
   const [loadingDetail, setLoadingDetail] = useState(false)
 
   // === 輸入欄位 ===
-  const [newImportantText, setNewImportantText] = useState('')
-  const [newTodoText, setNewTodoText] = useState('')
-  const [newTodoDate, setNewTodoDate] = useState('')
-  const [newTodoTime, setNewTodoTime] = useState('')
   const [newProgressText, setNewProgressText] = useState('')
   const [submitting, setSubmitting] = useState<string | null>(null)
 
@@ -970,10 +966,6 @@ export default function MarketingPage() {
 
   const handleSelectClient = (clientId: string) => {
     setSelectedClientId(clientId)
-    setNewImportantText('')
-    setNewTodoText('')
-    setNewTodoDate('')
-    setNewTodoTime('')
     setNewProgressText('')
     setShowFollowUpPicker(false)
     setShowFollowUpPrompt(false)
@@ -1001,75 +993,6 @@ export default function MarketingPage() {
     setSelectedClientId(clientId)
   }
 
-  // 新增重要大事
-  const handleAddImportant = async () => {
-    if (!newImportantText.trim() || !selectedClientId) return
-    setSubmitting('important')
-    try {
-      const res = await fetch('/api/important-items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newImportantText.trim(),
-          clientId: selectedClientId,
-          clientName: selectedClient?.name,
-          source: 'buyer',
-        }),
-      })
-      if (res.ok) {
-        const item = await res.json()
-        setClientImportantItems((prev) => [...prev, item])
-        setImportantItems((prev) => [...prev, item])
-        setNewImportantText('')
-      }
-    } finally {
-      setSubmitting(null)
-    }
-  }
-
-  // 新增待辦（+ Google Calendar 串接）
-  const handleAddTodo = async () => {
-    if (!newTodoText.trim() || !selectedClientId) return
-    setSubmitting('todo')
-    try {
-      // 如果有選日期，把日期附在標題後面
-      const dateStr = newTodoDate
-      const d = dateStr ? new Date(dateStr) : null
-      const timeSuffix = newTodoTime ? ` ${newTodoTime}` : ''
-      const dateSuffix = d ? ` (${d.getMonth() + 1}/${d.getDate()}${timeSuffix})` : ''
-      const fullTitle = newTodoText.trim() + dateSuffix
-
-      const res = await fetch(`/api/clients/${selectedClientId}/todos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: fullTitle }),
-      })
-      if (res.ok) {
-        const todo = await res.json()
-        setClientTodos((prev) => [todo, ...prev])
-        setNewTodoText('')
-
-        // 有選日期 → 建 Google Calendar 事件
-        const calendarDate = composeDatetime(dateStr, newTodoTime)
-        if (calendarDate && selectedClient) {
-          fetch('/api/calendar/event', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              summary: `[${selectedClient.name}] ${newTodoText.trim()}`,
-              date: calendarDate,
-              description: `CRM 待辦 - 客戶：${selectedClient.name}`,
-            }),
-          }).catch((err) => console.error('Calendar event error:', err))
-        }
-
-        setNewTodoDate('')
-        setNewTodoTime('')
-      }
-    } finally {
-      setSubmitting(null)
-    }
-  }
 
   // 動畫版 toggle 客戶待辦完成（對齊白色 handleAnimatedToggleTodo 時序：300/600/800 ms）
   // 流程：checked → await PATCH → (ok) strikethrough → fading → remove / (fail) rollback（不 toast）
@@ -2066,27 +1989,13 @@ export default function MarketingPage() {
                     <div className="space-y-4">
                     {/* ① 重要大事 */}
                     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                      {/* 標題列 + 輸入欄同一行 */}
-                      <div className="flex items-center gap-3">
+                      {/* 標題列（新增請用上方公告欄、此處只檢視） */}
+                      <div className="flex items-center gap-2">
                         <h3 className="text-sm font-semibold text-amber-400 flex items-center gap-2 shrink-0">
                           <Star size={14} />
                           重要大事
                         </h3>
-                        <input
-                          type="text"
-                          placeholder="新增重要大事..."
-                          value={newImportantText}
-                          onChange={(e) => setNewImportantText(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddImportant()}
-                          className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                        />
-                        <button
-                          onClick={handleAddImportant}
-                          disabled={submitting === 'important' || !newImportantText.trim()}
-                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm rounded transition-colors shrink-0"
-                        >
-                          <Plus size={14} />
-                        </button>
+                        <span className="text-[11px] text-slate-600">＋ 新增請用上方公告欄</span>
                       </div>
                       {/* 列表 */}
                       {clientImportantItems.length === 0 ? (
@@ -2111,43 +2020,14 @@ export default function MarketingPage() {
 
                     {/* ② 待辦事項（A. 逾期視覺 + D. 今日 highlight） */}
                     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                      {/* 標題列 + 輸入欄同一行 */}
-                      <div className="flex items-center gap-3">
+                      {/* 標題列（新增請用上方公告欄、此處只檢視） */}
+                      <div className="flex items-center gap-2">
                         <h3 className="text-sm font-semibold text-green-400 flex items-center gap-2 shrink-0">
                           <CheckSquare size={14} />
                           待辦事項
                         </h3>
-                        <input
-                          type="text"
-                          placeholder="新增待辦..."
-                          value={newTodoText}
-                          onChange={(e) => setNewTodoText(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddTodo()}
-                          className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                        />
-                        <DateTimePopover
-                          date={newTodoDate}
-                          time={newTodoTime}
-                          onChange={(d, t) => {
-                            setNewTodoDate(d)
-                            setNewTodoTime(t)
-                          }}
-                          align="right"
-                          title="待辦日期時間"
-                        />
-                        <button
-                          onClick={handleAddTodo}
-                          disabled={submitting === 'todo' || !newTodoText.trim()}
-                          className="px-2.5 py-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm rounded transition-colors shrink-0"
-                        >
-                          <Plus size={14} />
-                        </button>
+                        <span className="text-[11px] text-slate-600">＋ 新增請用上方公告欄</span>
                       </div>
-                      {newTodoDate && (
-                        <p className="text-xs text-slate-500 mt-1.5">
-                          📅 {newTodoDate}{newTodoTime ? ` ${newTodoTime}` : ''}・將同步建立 Google Calendar 事件
-                        </p>
-                      )}
                       {/* 列表 */}
                       {clientTodos.length === 0 ? (
                         <p className="text-xs text-slate-500 mt-3">目前無待辦事項</p>
