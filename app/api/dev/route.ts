@@ -18,6 +18,7 @@ export interface DevPropertyData {
   address?: string
   householdAddress?: string
   status?: DevStatus
+  occupancy?: string
   closingDate?: string | null
   expiry?: string | null
   important?: string
@@ -50,6 +51,7 @@ function mapPage(p: any): DevPropertyData {
     address: extractText(props['物件地址']?.rich_text || []) || undefined,
     householdAddress: extractText(props['戶藉地址']?.rich_text || []) || undefined,
     status: (extractSelectValue(props['狀態']?.select) || undefined) as DevStatus | undefined,
+    occupancy: extractSelectValue(props['現況']?.select) || undefined,
     closingDate: props['成交日期']?.date?.start ?? null,
     expiry: props['委託到期日']?.date?.start ?? null,
     important: extractText(props['重要事項']?.rich_text || []) || undefined,

@@ -2666,6 +2666,47 @@ export default function MarketingPage() {
                             {prop.owner && (
                               <span className="text-sm text-slate-300">屋主：{prop.owner}</span>
                             )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {prop.occupancy && (
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                    prop.occupancy === '空屋'
+                                      ? 'bg-emerald-500/25 text-emerald-200'
+                                      : prop.occupancy === '自住'
+                                        ? 'bg-orange-500/25 text-orange-200'
+                                        : 'bg-slate-700/60 text-slate-300'
+                                  }`}
+                                >
+                                  {prop.occupancy}
+                                </span>
+                              )}
+                              {prop.area && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300">
+                                  {prop.area.endsWith('坪') ? prop.area : `${prop.area}坪`}
+                                </span>
+                              )}
+                              {prop.price && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300">
+                                  {prop.price.endsWith('萬') ? prop.price : `${prop.price}萬`}
+                                </span>
+                              )}
+                              {prop.layout && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300">
+                                  {prop.layout}
+                                </span>
+                              )}
+                              {prop.web && (
+                                <a
+                                  href={prop.web}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs px-1.5 py-0.5 rounded bg-indigo-900/40 text-indigo-300 hover:bg-indigo-800/50 hover:text-indigo-200 transition-colors"
+                                  title="開啟社區網頁"
+                                >
+                                  社區
+                                </a>
+                              )}
+                            </div>
                             {prop.ownerPhone && (
                               <a
                                 href={`tel:${prop.ownerPhone}`}
