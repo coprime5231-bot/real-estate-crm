@@ -830,34 +830,58 @@ export default function MarketingPage() {
     [clients, selectedClientId]
   )
 
+  // 公告欄快速新增的對象：委託 tab 選了案子 → 記給案子；否則 → 記給選中的買方
+  const quickTarget = useMemo(() => {
+    if (activeTab === 'entrust' && selectedPropertyId && selectedProperty) {
+      return { kind: 'case' as const, id: selectedPropertyId, name: selectedProperty.name }
+    }
+    if (selectedClientId && selectedClient) {
+      return { kind: 'buyer' as const, id: selectedClientId, name: selectedClient.name }
+    }
+    return null
+  }, [activeTab, selectedPropertyId, selectedProperty, selectedClientId, selectedClient])
+
   // === A2. 快速新增重要事項（頂部） ===
   const handleQuickAddImportant = useCallback(async () => {
     if (!quickImportantText.trim()) return
-    const clientId = quickImportantBound && selectedClientId ? selectedClientId : undefined
-    const clientName = clientId ? selectedClient?.name : undefined
+    const bound = quickImportantBound ? quickTarget : null
 
-    // 有選日期時間 → 附在標題後面（重要事項 API 沒有日期欄位）
     const d = quickImportantDate ? new Date(quickImportantDate) : null
     const timeSuffix = quickImportantTime ? ` ${quickImportantTime}` : ''
     const dateSuffix = d ? ` (${d.getMonth() + 1}/${d.getDate()}${timeSuffix})` : ''
     const fullTitle = quickImportantText.trim() + dateSuffix
 
     try {
-      const res = await fetch('/api/important-items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: fullTitle,
-          clientId,
-          clientName: clientName || '',
-          source: 'buyer',
-        }),
-      })
-      if (!res.ok) throw new Error('API error')
-      const item = await res.json()
-      setImportantItems((prev) => [item, ...prev])
-      if (clientId && clientId === selectedClientId) {
-        setClientImportantItems((prev) => [item, ...prev])
+      if (bound?.kind === 'case') {
+        const res = await fetch(`/api/dev/${bound.id}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind: 'important', title: fullTitle }),
+        })
+        if (!res.ok) throw new Error('API error')
+        const item = await res.json()
+        if (selectedPropertyId === bound.id) {
+          setEntrustImportantItems((prev) => [item, ...prev])
+        }
+      } else {
+        const clientId = bound?.kind === 'buyer' ? bound.id : undefined
+        const clientName = clientId ? bound?.name : undefined
+        const res = await fetch('/api/important-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: fullTitle,
+            clientId,
+            clientName: clientName || '',
+            source: 'buyer',
+          }),
+        })
+        if (!res.ok) throw new Error('API error')
+        const item = await res.json()
+        setImportantItems((prev) => [item, ...prev])
+        if (clientId && clientId === selectedClientId) {
+          setClientImportantItems((prev) => [item, ...prev])
+        }
       }
       setQuickImportantText('')
       setQuickImportantDate('')
@@ -866,13 +890,12 @@ export default function MarketingPage() {
     } catch {
       toast.error('新增重要事項失敗')
     }
-  }, [quickImportantText, quickImportantBound, quickImportantDate, quickImportantTime, selectedClientId, selectedClient])
+  }, [quickImportantText, quickImportantBound, quickTarget, quickImportantDate, quickImportantTime, selectedClientId, selectedPropertyId])
 
   // === A2. 快速新增待辦（頂部） ===
   const handleQuickAddTodo = useCallback(async () => {
     if (!quickTodoText.trim()) return
-    const clientId = quickTodoBound && selectedClientId ? selectedClientId : undefined
-    const clientName = clientId ? selectedClient?.name : undefined
+    const bound = quickTodoBound ? quickTarget : null
     const today = new Date()
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
     const dateStr = quickTodoDate || todayStr
@@ -883,32 +906,47 @@ export default function MarketingPage() {
     const fullTitle = `${quickTodoText.trim()} (${d.getMonth() + 1}/${d.getDate()}${timeSuffix})`
 
     try {
-      const res = await fetch('/api/todo-items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: fullTitle,
-          date: dateStr,
-          clientId,
-          clientName: clientName || '',
-        }),
-      })
-      if (!res.ok) throw new Error('API error')
-      const item = await res.json()
-      setTodoItems((prev) => [item, ...prev])
-
-      // 有指定日期時間 → 建 Google Calendar 事件
-      if (quickTodoDate && selectedClient) {
-        const calendarDate = composeDatetime(quickTodoDate, quickTodoTime)
-        fetch('/api/calendar/event', {
+      if (bound?.kind === 'case') {
+        const res = await fetch(`/api/dev/${bound.id}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind: 'todo', title: fullTitle }),
+        })
+        if (!res.ok) throw new Error('API error')
+        const item = await res.json()
+        if (selectedPropertyId === bound.id) {
+          setEntrustTodos((prev) => [item, ...prev])
+        }
+      } else {
+        const clientId = bound?.kind === 'buyer' ? bound.id : undefined
+        const clientName = clientId ? bound?.name : undefined
+        const res = await fetch('/api/todo-items', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            summary: `[${selectedClient.name}] ${quickTodoText.trim()}`,
-            date: calendarDate,
-            description: `CRM 待辦 - 客戶：${selectedClient.name}`,
+            title: fullTitle,
+            date: dateStr,
+            clientId,
+            clientName: clientName || '',
           }),
-        }).catch((err) => console.error('Calendar event error:', err))
+        })
+        if (!res.ok) throw new Error('API error')
+        const item = await res.json()
+        setTodoItems((prev) => [item, ...prev])
+
+        // 有指定日期時間 → 建 Google Calendar 事件（僅買方路徑）
+        if (quickTodoDate && clientId && bound?.kind === 'buyer') {
+          const calendarDate = composeDatetime(quickTodoDate, quickTodoTime)
+          fetch('/api/calendar/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              summary: `[${bound.name}] ${quickTodoText.trim()}`,
+              date: calendarDate,
+              description: `CRM 待辦 - 客戶：${bound.name}`,
+            }),
+          }).catch((err) => console.error('Calendar event error:', err))
+        }
       }
 
       setQuickTodoText('')
@@ -918,7 +956,7 @@ export default function MarketingPage() {
     } catch {
       toast.error('新增待辦事項失敗')
     }
-  }, [quickTodoText, quickTodoBound, quickTodoDate, quickTodoTime, selectedClientId, selectedClient])
+  }, [quickTodoText, quickTodoBound, quickTarget, quickTodoDate, quickTodoTime, selectedClientId, selectedPropertyId])
 
   // === A3. 動畫版 toggle dashboard 待辦完成 ===
   // 流程：checked → await PATCH → (ok) strikethrough/fading/remove + toast / (fail) rollback + 紅 toast
@@ -1530,10 +1568,10 @@ export default function MarketingPage() {
                 />
               </div>
 
-              {selectedClientId && selectedClient && quickImportantBound && (
+              {quickTarget && quickImportantBound && (
                 <div className="flex items-center gap-1.5 text-xs text-green-400 mt-2">
                   <Check size={10} />
-                  <span>將記錄到：{selectedClient.name}</span>
+                  <span>將記錄到：{quickTarget.name}</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); setQuickImportantBound(false) }}
                     className="text-slate-500 hover:text-red-400 transition-colors"
@@ -1606,10 +1644,10 @@ export default function MarketingPage() {
                 />
               </div>
 
-              {selectedClientId && selectedClient && quickTodoBound && (
+              {quickTarget && quickTodoBound && (
                 <div className="flex items-center gap-1.5 text-xs text-green-400 mt-2">
                   <Check size={10} />
-                  <span>將記錄到：{selectedClient.name}</span>
+                  <span>將記錄到：{quickTarget.name}</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); setQuickTodoBound(false) }}
                     className="text-slate-500 hover:text-red-400 transition-colors"
@@ -2733,6 +2771,8 @@ export default function MarketingPage() {
                         onClick={() => {
                           setSelectedPropertyId(prop.id)
                           setEntrustDetailTab('latest')
+                          setQuickImportantBound(true)
+                          setQuickTodoBound(true)
                         }}
                         className={`px-4 py-3 cursor-pointer transition-all border-l-[3px] ${
                           isSelected
@@ -2892,7 +2932,7 @@ export default function MarketingPage() {
                               <Star size={14} />
                               重要事項
                             </h3>
-                            <span className="text-[11px] text-slate-600">（新增功能下一階段開放）</span>
+                            <span className="text-[11px] text-slate-600">＋ 新增請用上方公告欄</span>
                           </div>
                           {selectedProperty.important && (
                             <div className="mt-3 text-xs text-amber-300/80 bg-amber-950/30 border border-amber-900/40 rounded px-2 py-1.5 whitespace-pre-wrap">
@@ -2926,7 +2966,7 @@ export default function MarketingPage() {
                               <CheckSquare size={14} />
                               待辦事項
                             </h3>
-                            <span className="text-[11px] text-slate-600">（新增功能下一階段開放）</span>
+                            <span className="text-[11px] text-slate-600">＋ 新增請用上方公告欄</span>
                           </div>
                           {entrustTodos.length === 0 ? (
                             <p className="text-xs text-slate-500 mt-3">目前無待辦事項</p>

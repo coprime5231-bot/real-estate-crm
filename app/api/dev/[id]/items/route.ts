@@ -74,3 +74,72 @@ export async function GET(
     )
   }
 }
+
+async function titlePropName(dbId: string): Promise<string> {
+  const db: any = await notion.databases.retrieve({ database_id: dbId })
+  for (const [name, def] of Object.entries(db.properties || {})) {
+    if ((def as any).type === 'title') return name
+  }
+  return 'Name'
+}
+
+/**
+ * POST /api/dev/[id]/items   body={ kind:'important'|'todo', title }
+ *
+ * 在 IMPORTANT_DB/TODO_DB 建一筆、再把它 append 到此開發頁的
+ * 本周重要大事 / 待辦事項 single relation（先讀現有陣列再整包寫回）。
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  try {
+    const body = await request.json().catch(() => ({}))
+    const kind = body?.kind
+    const title = (body?.title || '').trim()
+    if (kind !== 'important' && kind !== 'todo') {
+      return NextResponse.json({ error: 'kind 必須是 important / todo' }, { status: 400 })
+    }
+    if (!title) {
+      return NextResponse.json({ error: '標題不可為空' }, { status: 400 })
+    }
+
+    const isImp = kind === 'important'
+    const dbId = isImp
+      ? process.env.NOTION_IMPORTANT_DB_ID
+      : process.env.NOTION_TODO_DB_ID
+    const relProp = isImp ? '本周重要大事' : '待辦事項'
+    if (!dbId) {
+      return NextResponse.json({ error: '未配置目標 DB' }, { status: 400 })
+    }
+
+    // 1. 建 item
+    const titleKey = isImp ? '名稱' : await titlePropName(dbId)
+    const props: any = {
+      [titleKey]: { title: [{ text: { content: title } }] },
+    }
+    if (isImp) props['優先级'] = { select: { name: '處理中' } }
+    else props['待辦'] = { checkbox: false }
+    const item: any = await notion.pages.create({
+      parent: { database_id: dbId },
+      properties: props,
+    })
+
+    // 2. 讀開發頁現有 relation、append 新 id、整包寫回（單向 single relation）
+    const dev: any = await notion.pages.retrieve({ page_id: params.id })
+    const cur: { id: string }[] = dev?.properties?.[relProp]?.relation || []
+    const next = [...cur.map((r) => ({ id: r.id })), { id: item.id }]
+    await notion.pages.update({
+      page_id: params.id,
+      properties: { [relProp]: { relation: next } },
+    })
+
+    return NextResponse.json({ id: item.id, title })
+  } catch (err: any) {
+    console.error('POST /api/dev/[id]/items failed:', err?.message || err)
+    return NextResponse.json(
+      { error: '新增失敗', detail: err?.message },
+      { status: 500 },
+    )
+  }
+}
